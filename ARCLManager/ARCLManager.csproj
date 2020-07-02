@@ -8,4 +8,8 @@
     <Compile Remove="ArclReplay.cs" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\SocketManager\SocketManager.csproj" />
+  </ItemGroup>
+
 </Project>
