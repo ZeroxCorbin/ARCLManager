@@ -49,7 +49,6 @@ namespace ARCLTypes
             }
 
         }
-        public string WriteOutputCommand => $"extIOOutputUpdate {Name} {Inputs[0]:X}";
         public string CreateSetCommand => $"extIOAdd {Name} {InputCount} {OutputCount}";
     }
     public class ExternalIOUpdateEventArgs: EventArgs
@@ -74,7 +73,7 @@ namespace ARCLTypes
 
                 List<byte> input = new List<byte>();
                 string txt = CleanHexString(spl[7]);
-                for (int i = 0; i < num_in / 8; i++)
+                for (int i = 0; i < num_in / 8; i +=2)
                 {
                     if (txt.Length < 2)
                         txt = txt.PadLeft(2, '0');
@@ -84,10 +83,9 @@ namespace ARCLTypes
 
                 }
 
-
                 List<byte> output = new List<byte>();
-                txt = CleanHexString(spl[7]);
-                for (int i = 0; i < num_ot / 8; i++)
+                txt = CleanHexString(spl[13]);
+                for (int i = 0; i < num_ot / 8; i+=2)
                 {
                     if (txt.Length < 2)
                         txt = txt.PadLeft(2, '0');

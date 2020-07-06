@@ -44,7 +44,7 @@ namespace ARCL
             this.Write("getgoals");
             System.Threading.Thread.Sleep(500);
 
-            string goalsString = this.ReadMessage();
+            string goalsString = this.Read();
             string[] rawGoals = goalsString.Split('\r');
 
             foreach (string s in rawGoals)
@@ -63,11 +63,11 @@ namespace ARCL
         public List<string> GetRoutes()
         {
             List<string> routes = new List<string>();
-            this.ReadMessage();
+            this.Read();
             this.Write("getroutes");
             System.Threading.Thread.Sleep(500);
 
-            string routesString = this.ReadMessage();
+            string routesString = this.Read();
             string[] rawRoutes = routesString.Split('\r');
 
             foreach (string s in rawRoutes)
@@ -86,11 +86,11 @@ namespace ARCL
         public List<string> GetInputs()
         {
             List<string> inputs = new List<string>();
-            this.ReadMessage();
+            this.Read();
             this.Write("inputlist");
             System.Threading.Thread.Sleep(500);
 
-            string inputsString = this.ReadMessage();
+            string inputsString = this.Read();
             string[] rawInputs = inputsString.Split('\r');
 
             foreach (string s in rawInputs)
@@ -108,11 +108,11 @@ namespace ARCL
         public List<string> GetOutputs()
         {
             List<string> outputs = new List<string>();
-            this.ReadMessage();
+            this.Read();
             this.Write("outputlist");
             System.Threading.Thread.Sleep(500);
 
-            string outputsString = this.ReadMessage();
+            string outputsString = this.Read();
             string[] rawOutputs = outputsString.Split('\r');
 
             foreach (string s in rawOutputs)
@@ -129,11 +129,11 @@ namespace ARCL
         }
         public bool CheckInput(string inputname)
         {
-            this.ReadMessage();
+            this.Read();
             this.Write("inputQuery " + inputname);
             System.Threading.Thread.Sleep(50);
 
-            string status = this.ReadMessage();
+            string status = this.Read();
             string input = status.Replace("InputList: ", String.Empty);
             input = input.Trim(new char[] { '\n', '\r' });
 
@@ -144,11 +144,11 @@ namespace ARCL
         }
         public bool CheckOutput(string outputname)
         {
-            this.ReadMessage();
+            this.Read();
             this.Write("outputQuery " + outputname);
             System.Threading.Thread.Sleep(50);
 
-            string status = this.ReadMessage();
+            string status = this.Read();
             string output = status.Replace("OutputList: ", String.Empty);
             output = output.Trim(new char[] { '\n', '\r' });
 
@@ -166,7 +166,7 @@ namespace ARCL
 
             System.Threading.Thread.Sleep(50);
 
-            string status = this.ReadMessage();
+            string status = this.Read();
             string output = status.Replace("Output: ", String.Empty);
             output = output.Trim(new char[] { '\n', '\r' });
 
@@ -185,7 +185,7 @@ namespace ARCL
             this.Write(string.Format("getconfigsectionvalues {0}\r\n", section));
             System.Threading.Thread.Sleep(500);
 
-            string msg = this.ReadMessage();
+            string msg = this.Read();
             string[] rawDevices = msg.Split('\r');
 
             foreach (string s in rawDevices)
@@ -369,7 +369,7 @@ namespace ARCL
         {
             bool success = false;
             Write("\r\n");
-            ReadMessage();
+            Read();
             Write(string.Format("extioAdd {0} {1} {2}\r\n", name, numIn.ToString(), numOut.ToString()));
             string message = Read();
             int attempts = 0;

@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Linq;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using ARCLTypes;
 
 namespace ARCL
@@ -110,8 +111,12 @@ namespace ARCL
         public void Stop()
         {
             if (IsSynced)
-                InSync?.BeginInvoke(this, false, null, null);
+            {
             IsSynced = false;
+                Task.Run(() => InSync?.Invoke(this, false));
+            }
+                
+
 
             Connection.ConnectState -= Connection_ConnectState;
             Connection.QueueRobotUpdate -= Connection_QueueRobotUpdate;
@@ -131,7 +136,7 @@ namespace ARCL
                 if (!IsSynced)
                 {
                     IsSynced = true;
-                    InSync?.BeginInvoke(this, true, null, null);
+                    Task.Run(() => InSync?.Invoke(this, true));
                 }
                 return;
             }

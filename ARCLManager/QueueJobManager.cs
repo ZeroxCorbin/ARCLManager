@@ -5,6 +5,7 @@ using System.ComponentModel.Design;
 using System.Diagnostics;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using ARCLTypes;
 
 namespace ARCL
@@ -143,7 +144,7 @@ namespace ARCL
                 if (data.IsEnd & !IsSynced)
                 {
                     IsSynced = true;
-                    InSync?.BeginInvoke(this, true, null, null);
+                    Task.Run(() => InSync?.Invoke(this, true));
                     return;
                 }
 
@@ -170,7 +171,7 @@ namespace ARCL
                 }
 
                 if (_Jobs[data.JobID].Status == ARCLStatus.Completed || _Jobs[data.JobID].Status == ARCLStatus.Cancelled)
-                    JobComplete?.Invoke(new object(), data);
+                    Task.Run(() => JobComplete?.Invoke(new object(), data));
             }
 
         }

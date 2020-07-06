@@ -69,7 +69,7 @@ namespace ARCL
             if (data.IsEnd)
             {
                 IsSynced = true;
-                InSync?.BeginInvoke(this, InProcessSectionName, null, null);
+                Task.Run(() => InSync?.Invoke(this, InProcessSectionName));
                 InProcessSectionName = null;
             }
         }

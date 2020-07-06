@@ -7,7 +7,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
-
+using System.Threading.Tasks;
 using ARCLTypes;
 using SocketManagerNS;
 
@@ -88,15 +88,21 @@ namespace ARCL
             {
                 if (Login())
                 {
-                    ConnectState?.BeginInvoke(this, true, null, null);
+                    Task.Run(() => ConnectState?.Invoke(this, true));
                     base.DataReceived += Connection_DataReceived;
+                    base.ConnectState += ARCLConnection_ConnectState;
                     return true;
                 }
             }
-            ConnectState?.BeginInvoke(this, false, null, null);
+            Task.Run(() => ConnectState?.Invoke(this, false));
             return false;
         }
 
+        private void ARCLConnection_ConnectState(object sender, bool state)
+        {
+            Task.Run(() => ConnectState?.Invoke(sender, state));
+            if (!state) base.ConnectState -= ARCLConnection_ConnectState;
+        }
         /// <summary>
         /// Writes the message to the ARCL server.
         /// Appends "\r\n" to the message.
@@ -137,52 +143,48 @@ namespace ARCL
         //Private
         private void Connection_DataReceived(object sender, string data)
         {
-            string[] messages = MessageSplit(data);
+            string message = data.Trim('\r', '\n');
 
-            foreach (string message in messages)
+            if ((message.StartsWith("Queue", StringComparison.CurrentCultureIgnoreCase) | message.StartsWith("EndQueue", StringComparison.CurrentCultureIgnoreCase)) & !message.Contains("Robot"))
             {
-                if ((message.StartsWith("Queue", StringComparison.CurrentCultureIgnoreCase) | message.StartsWith("EndQueue", StringComparison.CurrentCultureIgnoreCase)) & !message.Contains("Robot"))
-                {
-                    QueueJobUpdate?.BeginInvoke(this, new QueueJobUpdateEventArgs(message), null, null);
-                    continue;
-                }
+                Task.Run(() => QueueJobUpdate?.Invoke(this, new QueueJobUpdateEventArgs(message)));
+                return;
+            }
 
-                if ((message.StartsWith("Queue", StringComparison.CurrentCultureIgnoreCase) | message.StartsWith("EndQueue", StringComparison.CurrentCultureIgnoreCase)) & message.Contains("Robot"))
-                {
-                    QueueRobotUpdate?.BeginInvoke(this, new QueueRobotUpdateEventArgs(message), null, null);
-                    continue;
-                }
+            if ((message.StartsWith("Queue", StringComparison.CurrentCultureIgnoreCase) | message.StartsWith("EndQueue", StringComparison.CurrentCultureIgnoreCase)) & message.Contains("Robot"))
+            {
+                Task.Run(() => QueueRobotUpdate?.Invoke(this, new QueueRobotUpdateEventArgs(message)));
+                return;
+            }
 
-                if (message.StartsWith("ExtIO", StringComparison.CurrentCultureIgnoreCase) | message.StartsWith("EndExtIO", StringComparison.CurrentCultureIgnoreCase))
-                {
-                    ExternalIOUpdate?.BeginInvoke(this, new ExternalIOUpdateEventArgs(message), null, null);
-                    continue;
-                }
+            if (message.StartsWith("ExtIO", StringComparison.CurrentCultureIgnoreCase) | message.StartsWith("EndExtIO", StringComparison.CurrentCultureIgnoreCase))
+            {
+                Task.Run(() => ExternalIOUpdate?.Invoke(this, new ExternalIOUpdateEventArgs(message)));
+                return;
+            }
 
-                if (message.StartsWith("getconfigsection", StringComparison.CurrentCultureIgnoreCase) | message.StartsWith("endofgetconfigsection", StringComparison.CurrentCultureIgnoreCase))
-                {
-                    ConfigSectionUpdate?.BeginInvoke(this, new ConfigSectionUpdateEventArgs(message), null, null);
-                    continue;
-                }
+            if (message.StartsWith("getconfigsection", StringComparison.CurrentCultureIgnoreCase) | message.StartsWith("endofgetconfigsection", StringComparison.CurrentCultureIgnoreCase))
+            {
+                Task.Run(() => ConfigSectionUpdate?.Invoke(this, new ConfigSectionUpdateEventArgs(message)));
+                return;
+            }
 
-                if (message.StartsWith("Status:"))
-                {
-                    StatusUpdate?.BeginInvoke(this, new StatusUpdateEventArgs(message), null, null);
-                    continue;
-                }
+            if (message.StartsWith("Status:"))
+            {
+                Task.Run(() => StatusUpdate?.Invoke(this, new StatusUpdateEventArgs(message)));
+                return;
+            }
 
-                if (message.StartsWith("RangeDeviceGetCurrent:"))
-                {
-                    RangeDeviceCurrentUpdate?.BeginInvoke(this, new RangeDeviceUpdateEventArgs(message), null, null);
-                    continue;
-                }
+            if (message.StartsWith("RangeDeviceGetCurrent:"))
+            {
+                Task.Run(() => RangeDeviceCurrentUpdate?.Invoke(this, new RangeDeviceUpdateEventArgs(message)));
+                return;
+            }
 
-                if (message.StartsWith("RangeDeviceGetCumulative:"))
-                {
-                    RangeDeviceCumulativeUpdate?.BeginInvoke(this, new RangeDeviceUpdateEventArgs(message), null, null);
-                    continue;
-                }
-
+            if (message.StartsWith("RangeDeviceGetCumulative:"))
+            {
+                Task.Run(() => RangeDeviceCumulativeUpdate?.Invoke(this, new RangeDeviceUpdateEventArgs(message)));
+                return;
             }
         }
     }

@@ -1,4 +1,5 @@
 ﻿using ARCL;
+using System.Threading.Tasks;
 
 namespace ARCL
 {
@@ -39,8 +40,12 @@ namespace ARCL
         public void Stop()
         {
             if (IsSynced)
-                InSync?.BeginInvoke(this, false, null, null);
-            IsSynced = false;
+            {
+                IsSynced = false;
+Task.Run(() => InSync?.Invoke(this, false));
+            }
+                
+            
 
             Connection?.StopReceiveAsync();
         }
