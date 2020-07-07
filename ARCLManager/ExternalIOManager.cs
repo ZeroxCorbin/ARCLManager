@@ -3,12 +3,11 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Threading;
-using ARCLTaskQueue;
 using ARCLTypes;
 
 namespace ARCL
 {
-    public class ExternalIOManager : GroupedTaskQueue
+    public class ExternalIOManager
     {
         /// <summary>
         /// Raised when the External IO is sycronized with the EM.
@@ -61,7 +60,7 @@ namespace ARCL
             if (IsSynced)
             {
                 IsSynced = false;
-                this.Queue(false, new Action(() => InSync?.Invoke(this, false)));
+                Connection.Queue(false, new Action(() => InSync?.Invoke(this, false)));
             }
         }
 
@@ -73,10 +72,13 @@ namespace ARCL
 
             try
             {
-                if (inputs.Count() < ActiveSets.Count()) return false;
+                ReadOnlyDictionary<string, ExtIOSet> temp = ActiveSets;
+
+                if (inputs.Count() < temp.Count())
+                    return false;
 
                 int i = 0;
-                foreach (KeyValuePair<string, ExtIOSet> set in ActiveSets)
+                foreach (KeyValuePair<string, ExtIOSet> set in temp)
                 {
                     set.Value.Inputs = new List<byte> { inputs[i++] };
                     set.Value.AddedForPendingUpdate = true;
@@ -155,7 +157,7 @@ namespace ARCL
                     if (!IsSynced)
                     {
                         IsSynced = true;
-                        this.Queue(false, new Action(() => InSync?.Invoke(this, IsSynced)));
+                        Connection.Queue(false, new Action(() => InSync?.Invoke(this, IsSynced)));
                     }
                 }
                 return;
@@ -180,7 +182,7 @@ namespace ARCL
 
                 if (IsSynced)
                     if (!IsIOUpdate)
-                        this.Queue(false, new Action(() => InSync?.Invoke(this, true)));
+                        Connection.Queue(false, new Action(() => InSync?.Invoke(this, true)));
 
                 return;
             }
@@ -197,13 +199,13 @@ namespace ARCL
                     }
                     else
                         IsIOUpdate = true;
+
+                    foreach (KeyValuePair<string, ExtIOSet> set in _ActiveSets)
+                        IsIOUpdate |= set.Value.AddedForPendingUpdate;
                 }
 
-                foreach (KeyValuePair<string, ExtIOSet> set in _ActiveSets)
-                    IsIOUpdate |= set.Value.AddedForPendingUpdate;
-
                 if (!IsIOUpdate)
-                    this.Queue(false, new Action(() => InSync?.Invoke(this, true)));
+                    Connection.Queue(false, new Action(() => InSync?.Invoke(this, true)));
 
                 return;
             }

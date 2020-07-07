@@ -3,12 +3,11 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text;
-using ARCLTaskQueue;
 using ARCLTypes;
 
 namespace ARCL
 {
-    public class QueueJobManager : GroupedTaskQueue
+    public class QueueJobManager
     {       
         /// <summary>
         /// Raised when the Jobs list is sycronized with the EM job queue.
@@ -142,7 +141,7 @@ namespace ARCL
                 if (data.IsEnd & !IsSynced)
                 {
                     IsSynced = true;
-                    this.Queue(false, new Action(() => InSync?.Invoke(this, true)));
+                    Connection.Queue(false, new Action(() => InSync?.Invoke(this, true)));
                     return;
                 }
 
@@ -169,7 +168,7 @@ namespace ARCL
                 }
 
                 if (_Jobs[data.JobID].Status == ARCLStatus.Completed || _Jobs[data.JobID].Status == ARCLStatus.Cancelled)
-                    this.Queue(false, new Action(() => JobComplete?.Invoke(new object(), data)));
+                    Connection.Queue(false, new Action(() => JobComplete?.Invoke(new object(), data)));
             }
 
         }

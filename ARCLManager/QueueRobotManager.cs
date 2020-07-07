@@ -3,12 +3,11 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Threading;
-using ARCLTaskQueue;
 using ARCLTypes;
 
 namespace ARCL
 {
-    public class QueueRobotManager : GroupedTaskQueue
+    public class QueueRobotManager
     { 
         /// <summary>
         /// Raised when the Robots list is sycronized with the EM/LD robot queue.
@@ -112,7 +111,7 @@ namespace ARCL
             if (IsSynced)
             {
             IsSynced = false;
-                this.Queue(false, new Action(() => InSync?.Invoke(this, false)));
+                Connection.Queue(false, new Action(() => InSync?.Invoke(this, false)));
             }
                 
 
@@ -135,7 +134,7 @@ namespace ARCL
                 if (!IsSynced)
                 {
                     IsSynced = true;
-                    this.Queue(false, new Action(() => InSync?.Invoke(this, true)));
+                    Connection.Queue(false, new Action(() => InSync?.Invoke(this, true)));
                 }
                 return;
             }

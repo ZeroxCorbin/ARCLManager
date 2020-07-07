@@ -1,9 +1,8 @@
 ﻿using System;
-using ARCLTaskQueue;
 
 namespace ARCL
 {
-    public class RangeDeviceManager: GroupedTaskQueue
+    public class RangeDeviceManager
     {
         /// <summary>
         /// Raised when the External IO is sycronized with the EM.
@@ -42,7 +41,7 @@ namespace ARCL
             if (IsSynced)
             {
                 IsSynced = false;
-                this.Queue(false, new Action(() => InSync?.Invoke(this, false)));
+                Connection.Queue(false, new Action(() => InSync?.Invoke(this, false)));
             }
                 
             

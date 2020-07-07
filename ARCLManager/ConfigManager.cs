@@ -1,12 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using ARCLTaskQueue;
 using ARCLTypes;
 
 namespace ARCL
 {
-    public class ConfigManager : GroupedTaskQueue
+    public class ConfigManager
     {
         //Public
         /// <summary>
@@ -66,7 +65,7 @@ namespace ARCL
             if (data.IsEnd)
             {
                 IsSynced = true;
-                this.Queue(false, new Action(() => InSync?.Invoke(this, InProcessSectionName)));
+                Connection.Queue(false, new Action(() => InSync?.Invoke(this, InProcessSectionName)));
                 InProcessSectionName = null;
             }
         }
