@@ -88,20 +88,25 @@ namespace ARCL
             {
                 if (Login())
                 {
-                    Task.Run(() => ConnectState?.Invoke(this, true));
                     base.DataReceived += Connection_DataReceived;
                     base.ConnectState += ARCLConnection_ConnectState;
+
+                    this.Queue(false, new Action(() => ConnectState?.Invoke(this, true)));
+
                     return true;
                 }
             }
-            Task.Run(() => ConnectState?.Invoke(this, false));
+
+            this.Queue(false, new Action(() => ConnectState?.Invoke(this, false)));
             return false;
         }
 
         private void ARCLConnection_ConnectState(object sender, bool state)
         {
-            Task.Run(() => ConnectState?.Invoke(sender, state));
-            if (!state) base.ConnectState -= ARCLConnection_ConnectState;
+            if (!state)
+                base.ConnectState -= ARCLConnection_ConnectState;
+
+            this.Queue(false, new Action(() => ConnectState?.Invoke(sender, state)));
         }
         /// <summary>
         /// Writes the message to the ARCL server.
@@ -147,43 +152,43 @@ namespace ARCL
 
             if ((message.StartsWith("Queue", StringComparison.CurrentCultureIgnoreCase) | message.StartsWith("EndQueue", StringComparison.CurrentCultureIgnoreCase)) & !message.Contains("Robot"))
             {
-                Task.Run(() => QueueJobUpdate?.Invoke(this, new QueueJobUpdateEventArgs(message)));
+                this.Queue(false, new Action(() => QueueJobUpdate?.Invoke(this, new QueueJobUpdateEventArgs(message))));
                 return;
             }
 
             if ((message.StartsWith("Queue", StringComparison.CurrentCultureIgnoreCase) | message.StartsWith("EndQueue", StringComparison.CurrentCultureIgnoreCase)) & message.Contains("Robot"))
             {
-                Task.Run(() => QueueRobotUpdate?.Invoke(this, new QueueRobotUpdateEventArgs(message)));
+                this.Queue(false, new Action(() => QueueRobotUpdate?.Invoke(this, new QueueRobotUpdateEventArgs(message))));
                 return;
             }
 
             if (message.StartsWith("ExtIO", StringComparison.CurrentCultureIgnoreCase) | message.StartsWith("EndExtIO", StringComparison.CurrentCultureIgnoreCase))
             {
-                Task.Run(() => ExternalIOUpdate?.Invoke(this, new ExternalIOUpdateEventArgs(message)));
+                this.Queue(false, new Action(() => ExternalIOUpdate?.Invoke(this, new ExternalIOUpdateEventArgs(message))));
                 return;
             }
 
             if (message.StartsWith("getconfigsection", StringComparison.CurrentCultureIgnoreCase) | message.StartsWith("endofgetconfigsection", StringComparison.CurrentCultureIgnoreCase))
             {
-                Task.Run(() => ConfigSectionUpdate?.Invoke(this, new ConfigSectionUpdateEventArgs(message)));
+                this.Queue(false, new Action(() => ConfigSectionUpdate?.Invoke(this, new ConfigSectionUpdateEventArgs(message))));
                 return;
             }
 
             if (message.StartsWith("Status:"))
             {
-                Task.Run(() => StatusUpdate?.Invoke(this, new StatusUpdateEventArgs(message)));
+                this.Queue(false, new Action(() => StatusUpdate?.Invoke(this, new StatusUpdateEventArgs(message))));
                 return;
             }
 
             if (message.StartsWith("RangeDeviceGetCurrent:"))
             {
-                Task.Run(() => RangeDeviceCurrentUpdate?.Invoke(this, new RangeDeviceUpdateEventArgs(message)));
+                this.Queue(false, new Action(() => RangeDeviceCurrentUpdate?.Invoke(this, new RangeDeviceUpdateEventArgs(message))));
                 return;
             }
 
             if (message.StartsWith("RangeDeviceGetCumulative:"))
             {
-                Task.Run(() => RangeDeviceCumulativeUpdate?.Invoke(this, new RangeDeviceUpdateEventArgs(message)));
+                this.Queue(false, new Action(() => RangeDeviceCumulativeUpdate?.Invoke(this, new RangeDeviceUpdateEventArgs(message))));
                 return;
             }
         }

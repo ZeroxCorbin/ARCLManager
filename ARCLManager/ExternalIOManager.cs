@@ -1,16 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Diagnostics;
 using System.Linq;
-using System.Runtime.CompilerServices;
 using System.Threading;
-using System.Threading.Tasks;
+using ARCLTaskQueue;
 using ARCLTypes;
 
 namespace ARCL
 {
-    public class ExternalIOManager
+    public class ExternalIOManager : GroupedTaskQueue
     {
         /// <summary>
         /// Raised when the External IO is sycronized with the EM.
@@ -63,7 +61,7 @@ namespace ARCL
             if (IsSynced)
             {
                 IsSynced = false;
-                Task.Run(() => InSync?.Invoke(this, false));
+                this.Queue(false, new Action(() => InSync?.Invoke(this, false)));
             }
         }
 
@@ -157,7 +155,7 @@ namespace ARCL
                     if (!IsSynced)
                     {
                         IsSynced = true;
-                        Task.Run(() => InSync?.Invoke(this, IsSynced));
+                        this.Queue(false, new Action(() => InSync?.Invoke(this, IsSynced)));
                     }
                 }
                 return;
@@ -182,7 +180,7 @@ namespace ARCL
 
                 if (IsSynced)
                     if (!IsIOUpdate)
-                        Task.Run(() => InSync?.Invoke(this, true));
+                        this.Queue(false, new Action(() => InSync?.Invoke(this, true)));
 
                 return;
             }
@@ -205,7 +203,7 @@ namespace ARCL
                     IsIOUpdate |= set.Value.AddedForPendingUpdate;
 
                 if (!IsIOUpdate)
-                    Task.Run(() => InSync?.Invoke(this, true));
+                    this.Queue(false, new Action(() => InSync?.Invoke(this, true)));
 
                 return;
             }

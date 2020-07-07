@@ -1,8 +1,4 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace ARCLTypes
 {
@@ -197,29 +193,29 @@ namespace ARCLTypes
                             break;
 
                         case "DockingState:":
-                            if (!spl[i + 1].Contains(':'))
+                            if (!spl[i + 1].Contains(":"))
                                 DockingState = spl[++i];
                             break;
 
                         case "ForcedState:":
-                            if (!spl[i + 1].Contains(':'))
+                            if (!spl[i + 1].Contains(":"))
                                 ForcedState = spl[++i];
                             break;
 
                         case "ChargeState:":
-                            if (!spl[i + 1].Contains(':'))
+                            if (!spl[i + 1].Contains(":"))
                                 if (float.TryParse(spl[++i], out val))
                                     ChargeState = val;
                             break;
 
                         case "StateOfCharge:":
-                            if (!spl[i + 1].Contains(':'))
+                            if (!spl[i + 1].Contains(":"))
                                 if (float.TryParse(spl[++i], out val))
                                     StateOfCharge = val;
                             break;
 
                         case "Location:":
-                            if (!spl[i + 1].Contains(':'))
+                            if (!spl[i + 1].Contains(":"))
                             {
                                 Location = String.Format("{0},{1},{2}", spl[++i], spl[++i], spl[++i]);
                                 string[] spl1 = Location.Split(',');
@@ -230,7 +226,7 @@ namespace ARCLTypes
 
                             break;
                         case "Temperature:":
-                            if (!spl[i + 1].Contains(':'))
+                            if (!spl[i + 1].Contains(":"))
                                 if (float.TryParse(spl[++i], out val))
                                     Temperature = val;
                             break;

@@ -1,15 +1,12 @@
-﻿using ARCL;
-using ARCLTypes;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
+using ARCLTaskQueue;
+using ARCLTypes;
 
 namespace ARCL
 {
-    public class ConfigManager
+    public class ConfigManager : GroupedTaskQueue
     {
         //Public
         /// <summary>
@@ -69,7 +66,7 @@ namespace ARCL
             if (data.IsEnd)
             {
                 IsSynced = true;
-                Task.Run(() => InSync?.Invoke(this, InProcessSectionName));
+                this.Queue(false, new Action(() => InSync?.Invoke(this, InProcessSectionName)));
                 InProcessSectionName = null;
             }
         }
