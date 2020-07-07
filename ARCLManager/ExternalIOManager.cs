@@ -22,14 +22,8 @@ namespace ARCL
         /// </summary>
         public bool IsSynced { get; private set; } = false;
 
-        public delegate void IOUpdateEventHandler(object sender, ExternalIOUpdateEventArgs set);
-        public event IOUpdateEventHandler IOUpdate;
-        /// <summary>
-        /// True when the External IO is sycronized with the EM.
-        /// </summary>
-        public bool IsIOUpdate { get; private set; } = false;
-
         private ARCLConnection Connection { get; set; }
+        private bool IsIOUpdate { get; set; } = false;
 
         private Dictionary<string, ExtIOSet> _ActiveSets { get; } = new Dictionary<string, ExtIOSet>();
         public ReadOnlyDictionary<string, ExtIOSet> ActiveSets
@@ -186,7 +180,7 @@ namespace ARCL
                         IsIOUpdate |= set.Value.AddedForPendingUpdate;
                 }
 
-                if(IsSynced)
+                if (IsSynced)
                     if (!IsIOUpdate)
                         Task.Run(() => InSync?.Invoke(this, true));
 
