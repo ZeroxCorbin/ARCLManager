@@ -51,7 +51,7 @@ namespace ARCLTypes
             }
 
             //QueueMulti: goal "Goal1" with priority 10 id PICKUP12 and job_id OWBQYSXSGZ successfully queued
-            if (spl[0].StartsWith("queuemulti", StringComparison.CurrentCultureIgnoreCase))
+            if (spl[0].StartsWith("QueueMulti", StringComparison.CurrentCultureIgnoreCase))
             {
                 try
                 {
@@ -103,7 +103,7 @@ namespace ARCLTypes
             //QueueShow: <id> <jobId> <priority> <status> <substatus> Goal <"goalName"> <”robotName”>
             //           <queued date> <queued time> <completed date> <completed time> <echoString> <failed count>
             //QueueShow: PICKUP3 JOB3 10 Completed None Goal "1" "21" 11/14/2012 11:49:23 11/14/2012 11:49:23 "" 0
-            if (spl[0].StartsWith("QueueShow", StringComparison.CurrentCultureIgnoreCase) || spl[0].StartsWith("QueueUpdate", StringComparison.CurrentCultureIgnoreCase))
+            if (spl[0].StartsWith("QueueShow", StringComparison.CurrentCultureIgnoreCase) | spl[0].StartsWith("QueueUpdate", StringComparison.CurrentCultureIgnoreCase))
             {
                 try
                 {

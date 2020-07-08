@@ -147,6 +147,7 @@ namespace ARCL
                     Connection.Queue(false, new Action(() => InSync?.Invoke(this, true)));
                     return;
                 }
+                if (data.IsEnd) return;
 
                 if (!_Jobs.ContainsKey(data.JobID))
                 {

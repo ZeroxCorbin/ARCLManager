@@ -150,15 +150,15 @@ namespace ARCL
         {
             string message = data.Trim('\r', '\n');
 
-            if ((message.StartsWith("Queue", StringComparison.CurrentCultureIgnoreCase) | message.StartsWith("EndQueue", StringComparison.CurrentCultureIgnoreCase)) & !message.Contains("Robot"))
+            if ((message.StartsWith("QueueShowRobot", StringComparison.CurrentCultureIgnoreCase) | message.StartsWith("EndQueueShowRobot", StringComparison.CurrentCultureIgnoreCase)))
             {
-                this.Queue(false, new Action(() => QueueJobUpdate?.Invoke(this, new QueueJobUpdateEventArgs(message))));
+                this.Queue(false, new Action(() => QueueRobotUpdate?.Invoke(this, new QueueRobotUpdateEventArgs(message))));
                 return;
             }
 
-            if ((message.StartsWith("Queue", StringComparison.CurrentCultureIgnoreCase) | message.StartsWith("EndQueue", StringComparison.CurrentCultureIgnoreCase)) & message.Contains("Robot"))
+            if ((message.StartsWith("QueueShow", StringComparison.CurrentCultureIgnoreCase) | message.StartsWith("EndQueueShow", StringComparison.CurrentCultureIgnoreCase)))
             {
-                this.Queue(false, new Action(() => QueueRobotUpdate?.Invoke(this, new QueueRobotUpdateEventArgs(message))));
+                this.Queue(false, new Action(() => QueueJobUpdate?.Invoke(this, new QueueJobUpdateEventArgs(message))));
                 return;
             }
 
