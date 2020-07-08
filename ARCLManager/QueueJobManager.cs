@@ -171,9 +171,11 @@ namespace ARCL
                 }
 
                 if (_Jobs[data.JobID].Status == ARCLStatus.Completed || _Jobs[data.JobID].Status == ARCLStatus.Cancelled)
+                {
+                    _Jobs.Remove(data.JobID);
                     Connection.Queue(false, new Action(() => JobComplete?.Invoke(new object(), data)));
+                }
             }
-
         }
     }
 }
