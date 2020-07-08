@@ -26,8 +26,10 @@ namespace ARCLTypes
         public int FailCount { get; }
         public bool IsEnd { get; }
 
-        public QueueJobUpdateEventArgs(string goalName, GoalTypes goalType, int priority = 10)
+        public QueueJobUpdateEventArgs(string jobID, string goalName, GoalTypes goalType, int priority = 10)
         {
+            JobID = jobID;
+
             GoalName = goalName;
             Priority = priority;
             GoalType = goalType;
