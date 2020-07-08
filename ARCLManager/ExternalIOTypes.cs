@@ -104,12 +104,17 @@ namespace ARCLTypes
             {
                 if (!spl[1].Contains("input")) throw new ExtIOUpdateParseException();
 
-                int cnt = (spl[7].Count() - 2) / 2;
-
+                
                 List<byte> input = new List<byte>();
-                string txt = CleanHexString(spl[5]);
-                for (int i = 0; i < cnt; i++)
-                    input.Add(byte.Parse(txt.Substring(i, 2), System.Globalization.NumberStyles.HexNumber));
+                string txt = CleanHexString(spl[7]);
+                if (txt.Length < 2)
+                    txt = txt.PadLeft(2, '0');
+                int num_in = txt.Count() / 2;
+                for (int i = 0; i < num_in; i += 2)
+                {
+                    txt = txt.Substring(i, 2);
+                    input.Add(byte.Parse(txt, System.Globalization.NumberStyles.HexNumber));
+                }
 
                 this.ExtIOSet = new ExtIOSet(spl[2].Trim(), input, null);
 
