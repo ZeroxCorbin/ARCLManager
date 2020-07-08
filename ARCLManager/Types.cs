@@ -28,6 +28,16 @@ namespace ARCLTypes
     //             <robotName> <queued date> <queued time> <completed date = None > < completed time=None>
     //             <failed count>
 
+    public enum ARCLJobStatusRequestTypes
+    {
+        Pending,
+        Interrupted,
+        InProgress,
+        Completed,
+        Cancelled,
+        Failed,
+    }
+
     public enum ARCLStatus
     {
         Pending,

@@ -29,6 +29,8 @@ namespace ARCL
         public delegate void JobCompleteEventHandler(object sender, QueueJobUpdateEventArgs data);
         public event JobCompleteEventHandler JobComplete;
 
+
+
         public Dictionary<string, QueueManagerJob> _Jobs { get; private set; }
         public ReadOnlyDictionary<string, QueueManagerJob> Jobs
         {
@@ -132,6 +134,7 @@ namespace ARCL
 
         //Private
         private bool QueueShow() => Connection.Write("QueueShow");
+        private bool QueueShow(ARCLJobStatusRequestTypes status) => Connection.Write($"QueueShow status {status}");
         private bool QueueModify(string id, string type, string value) => Connection.Write($"queueModify {id} {type} {value}");
 
         private void Connection_QueueJobUpdate(object sender, QueueJobUpdateEventArgs data)

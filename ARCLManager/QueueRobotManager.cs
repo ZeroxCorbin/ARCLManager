@@ -8,7 +8,7 @@ using ARCLTypes;
 namespace ARCL
 {
     public class QueueRobotManager
-    { 
+    {
         /// <summary>
         /// Raised when the Robots list is sycronized with the EM/LD robot queue.
         /// Raised when the connection is dropped.
@@ -49,7 +49,7 @@ namespace ARCL
             get
             {
                 lock (RobotsDictLock)
-                   return Robots_.Count();
+                    return Robots_.Count();
             }
         }
         public bool IsRobotAvailable => RobotsAvailable > 0;
@@ -62,7 +62,7 @@ namespace ARCL
                 lock (RobotsDictLock)
                 {
                     int cnt = 0;
-                    foreach(KeyValuePair<string, QueueRobotUpdateEventArgs> robot in Robots_)
+                    foreach (KeyValuePair<string, QueueRobotUpdateEventArgs> robot in Robots_)
                         if (robot.Value.Status == ARCLStatus.Available & robot.Value.SubStatus == ARCLSubStatus.Available)
                             cnt++;
                     return cnt;
@@ -110,11 +110,9 @@ namespace ARCL
         {
             if (IsSynced)
             {
-            IsSynced = false;
+                IsSynced = false;
                 Connection.Queue(false, new Action(() => InSync?.Invoke(this, false)));
             }
-                
-
 
             Connection.ConnectState -= Connection_ConnectState;
             Connection.QueueRobotUpdate -= Connection_QueueRobotUpdate;
@@ -123,7 +121,7 @@ namespace ARCL
         }
 
         private void Connection_ConnectState(object sender, bool state)
-        { 
+        {
             if (!state)
                 Stop();
         }
@@ -144,7 +142,7 @@ namespace ARCL
                 if (!Robots_.ContainsKey(data.Name))
                 {
                     Robots_.Add(data.Name, data);
-                    if(IsSynced) IsSynced = false;
+                    if (IsSynced) IsSynced = false;
                 }
                 else
                     Robots_[data.Name] = data;
@@ -153,7 +151,7 @@ namespace ARCL
         private void QueueShowRobot() => Connection.Write("queueShowRobot");
         private void QueueShowRobotThread(object sender)
         {
-            while(!Connection.IsReceivingAsync) { };
+            while (!Connection.IsReceivingAsync) { };
 
             try
             {
@@ -164,7 +162,7 @@ namespace ARCL
                 Stopwatch sw = new Stopwatch();
 
                 sw.Restart();
-                while(sw.ElapsedMilliseconds < 1000)
+                while (sw.ElapsedMilliseconds < 1000)
                 {
                     if (!Connection.IsReceivingAsync)
                     {
@@ -180,7 +178,7 @@ namespace ARCL
             }
             finally
             {
-                if(IsRunning)
+                if (IsRunning)
                     ThreadPool.QueueUserWorkItem(new WaitCallback(QueueShowRobotThread));
             }
         }
