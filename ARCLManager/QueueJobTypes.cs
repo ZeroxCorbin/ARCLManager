@@ -222,7 +222,7 @@ namespace ARCLTypes
                     return null;
             }
         }
-        public List<QueueJobUpdateEventArgs> Goals { get; private set; }
+        public List<QueueJobUpdateEventArgs> Goals { get; private set; } = new List<QueueJobUpdateEventArgs>();
 
         public ARCLStatus Status
         {

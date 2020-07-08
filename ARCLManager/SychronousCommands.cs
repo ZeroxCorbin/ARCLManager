@@ -44,7 +44,7 @@ namespace ARCL
             this.Write("getgoals");
             System.Threading.Thread.Sleep(500);
 
-            string goalsString = this.Read();
+            string goalsString = this.Read("");
             string[] rawGoals = goalsString.Split('\r');
 
             foreach (string s in rawGoals)
