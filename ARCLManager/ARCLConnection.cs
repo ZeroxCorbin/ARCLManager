@@ -148,49 +148,54 @@ namespace ARCL
         //Private
         private void Connection_DataReceived(object sender, string data)
         {
-            string message = data.Trim('\r', '\n');
+            string[] messages = data.Split('\n');
 
-            if ((message.StartsWith("QueueShowRobot", StringComparison.CurrentCultureIgnoreCase) | message.StartsWith("EndQueueShowRobot", StringComparison.CurrentCultureIgnoreCase)))
+            foreach(string msg in messages)
             {
-                this.Queue(false, new Action(() => QueueRobotUpdate?.Invoke(this, new QueueRobotUpdateEventArgs(message))));
-                return;
+                string message = msg.Trim('\r');
+                if ((message.StartsWith("QueueShowRobot", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndQueueShowRobot", StringComparison.CurrentCultureIgnoreCase)))
+                {
+                    this.Queue(false, new Action(() => QueueRobotUpdate?.Invoke(this, new QueueRobotUpdateEventArgs(message))));
+                    continue;
+                }
+
+                if ((message.StartsWith("QueueShow", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndQueueShow", StringComparison.CurrentCultureIgnoreCase)))
+                {
+                    this.Queue(false, new Action(() => QueueJobUpdate?.Invoke(this, new QueueJobUpdateEventArgs(message))));
+                    continue;
+                }
+
+                if (message.StartsWith("ExtIO", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndExtIO", StringComparison.CurrentCultureIgnoreCase))
+                {
+                    this.Queue(false, new Action(() => ExternalIOUpdate?.Invoke(this, new ExternalIOUpdateEventArgs(message))));
+                    continue;
+                }
+
+                if (message.StartsWith("getconfigsection", StringComparison.CurrentCultureIgnoreCase) | message.StartsWith("endofgetconfigsection", StringComparison.CurrentCultureIgnoreCase))
+                {
+                    this.Queue(false, new Action(() => ConfigSectionUpdate?.Invoke(this, new ConfigSectionUpdateEventArgs(message))));
+                    continue;
+                }
+
+                if (message.StartsWith("Status:"))
+                {
+                    this.Queue(false, new Action(() => StatusUpdate?.Invoke(this, new StatusUpdateEventArgs(message))));
+                    continue;
+                }
+
+                if (message.StartsWith("RangeDeviceGetCurrent:"))
+                {
+                    this.Queue(false, new Action(() => RangeDeviceCurrentUpdate?.Invoke(this, new RangeDeviceUpdateEventArgs(message))));
+                    continue;
+                }
+
+                if (message.StartsWith("RangeDeviceGetCumulative:"))
+                {
+                    this.Queue(false, new Action(() => RangeDeviceCumulativeUpdate?.Invoke(this, new RangeDeviceUpdateEventArgs(message))));
+                    continue;
+                }
             }
 
-            if ((message.StartsWith("QueueShow", StringComparison.CurrentCultureIgnoreCase) | message.StartsWith("EndQueueShow", StringComparison.CurrentCultureIgnoreCase)))
-            {
-                this.Queue(false, new Action(() => QueueJobUpdate?.Invoke(this, new QueueJobUpdateEventArgs(message))));
-                return;
-            }
-
-            if (message.StartsWith("ExtIO", StringComparison.CurrentCultureIgnoreCase) | message.StartsWith("EndExtIO", StringComparison.CurrentCultureIgnoreCase))
-            {
-                this.Queue(false, new Action(() => ExternalIOUpdate?.Invoke(this, new ExternalIOUpdateEventArgs(message))));
-                return;
-            }
-
-            if (message.StartsWith("getconfigsection", StringComparison.CurrentCultureIgnoreCase) | message.StartsWith("endofgetconfigsection", StringComparison.CurrentCultureIgnoreCase))
-            {
-                this.Queue(false, new Action(() => ConfigSectionUpdate?.Invoke(this, new ConfigSectionUpdateEventArgs(message))));
-                return;
-            }
-
-            if (message.StartsWith("Status:"))
-            {
-                this.Queue(false, new Action(() => StatusUpdate?.Invoke(this, new StatusUpdateEventArgs(message))));
-                return;
-            }
-
-            if (message.StartsWith("RangeDeviceGetCurrent:"))
-            {
-                this.Queue(false, new Action(() => RangeDeviceCurrentUpdate?.Invoke(this, new RangeDeviceUpdateEventArgs(message))));
-                return;
-            }
-
-            if (message.StartsWith("RangeDeviceGetCumulative:"))
-            {
-                this.Queue(false, new Action(() => RangeDeviceCumulativeUpdate?.Invoke(this, new RangeDeviceUpdateEventArgs(message))));
-                return;
-            }
         }
     }
 }

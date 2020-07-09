@@ -62,6 +62,13 @@ namespace ARCLTypes
 
             string[] spl = msg.Split(' ');
 
+            if (spl[0].StartsWith("EndExtIO", StringComparison.CurrentCultureIgnoreCase))
+            {
+                this.ExtIOSet = new ExtIOSet(true);
+
+                return;
+            }
+
             //ExtIODump: Test with 4 input(s), value = 0x0 and 4 output(s), value = 0x00
             if (spl[0].StartsWith("extiodump", StringComparison.CurrentCultureIgnoreCase))
             {
@@ -150,12 +157,7 @@ namespace ARCLTypes
             }
 
             //EndExtIODump
-            if (spl[0].StartsWith("EndExtIODump", StringComparison.CurrentCultureIgnoreCase))
-            {
-                this.ExtIOSet = new ExtIOSet(true);
 
-                return;
-            }
         }
 
         private string CleanHexString(string str)
