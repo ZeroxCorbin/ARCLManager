@@ -153,7 +153,7 @@ namespace ARCL
             foreach(string msg in messages)
             {
                 string message = msg.Trim('\r');
-                if ((message.StartsWith("QueueShowRobot", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndQueueShowRobot", StringComparison.CurrentCultureIgnoreCase)))
+                if ((message.StartsWith("QueueRobot", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndQueueShowRobot", StringComparison.CurrentCultureIgnoreCase)))
                 {
                     this.Queue(false, new Action(() => QueueRobotUpdate?.Invoke(this, new QueueRobotUpdateEventArgs(message))));
                     continue;

@@ -8,7 +8,7 @@ using ARCLTypes;
 namespace ARCL
 {
     public class QueueJobManager
-    {       
+    {
         /// <summary>
         /// Raised when the Jobs list is sycronized with the EM job queue.
         /// </summary>
@@ -127,16 +127,13 @@ namespace ARCL
 
             return true;
         }
-        public bool CancelJob(ref QueueManagerJob job)
-        {
-            return true;
-        }
+        public bool CancelJob(ref QueueManagerJob job) => QueueCancel("job", job.ID);
 
         //Private
         private bool QueueShow() => Connection.Write("QueueShow");
-        private bool QueueShow(ARCLJobStatusRequestTypes status) => Connection.Write($"QueueShow status {status}");
+        private bool QueueShow(ARCLJobStatusRequestTypes status) => Connection.Write($"queueShow status {status}");
         private bool QueueModify(string id, string type, string value) => Connection.Write($"queueModify {id} {type} {value}");
-
+        private bool QueueCancel(string type, string value) => Connection.Write($"queueCancel {type} {value}");
         private void Connection_QueueJobUpdate(object sender, QueueJobUpdateEventArgs data)
         {
             lock (JobsLock)
