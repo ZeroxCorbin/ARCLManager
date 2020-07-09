@@ -29,8 +29,6 @@ namespace ARCL
         public delegate void JobCompleteEventHandler(object sender, QueueJobUpdateEventArgs data);
         public event JobCompleteEventHandler JobComplete;
 
-
-
         public Dictionary<string, QueueManagerJob> _Jobs { get; private set; }
         public ReadOnlyDictionary<string, QueueManagerJob> Jobs
         {
@@ -165,7 +163,9 @@ namespace ARCL
 
                         i++;
                     }
-                    if (!found) _Jobs[data.JobID].AddGoal(data);
+
+                    if (!found)
+                        _Jobs[data.JobID].AddGoal(data);
                 }
 
                 if (_Jobs[data.JobID].Status == ARCLStatus.Completed || _Jobs[data.JobID].Status == ARCLStatus.Cancelled)
