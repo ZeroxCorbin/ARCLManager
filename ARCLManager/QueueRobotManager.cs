@@ -33,25 +33,8 @@ namespace ARCL
         /// Dictionary of Robots in the EM/LD queue.
         /// Not valid until InSync is true.
         /// </summary>
-        public Dictionary<string, QueueRobotUpdateEventArgs> Robots
-        {
-            get
-            {
-                lock (RobotsDictLock)
-                    return Robots_;
-            }
-        }
-        private Dictionary<string, QueueRobotUpdateEventArgs> Robots_ { get; } = new Dictionary<string, QueueRobotUpdateEventArgs>();
-        private object RobotsDictLock { get; set; } = new object();
+        public ReadOnlyConcurrentDictionary<string, QueueRobotUpdateEventArgs> Robots { get; set; } = new ReadOnlyConcurrentDictionary<string, QueueRobotUpdateEventArgs>(10, 100);
 
-        public int RobotCount
-        {
-            get
-            {
-                lock (RobotsDictLock)
-                    return Robots_.Count();
-            }
-        }
         public bool IsRobotAvailable => RobotsAvailable > 0;
         public int RobotsAvailable
         {
@@ -59,17 +42,14 @@ namespace ARCL
             {
                 if (!IsSynced) return 0;
 
-                lock (RobotsDictLock)
-                {
-                    int cnt = 0;
-                    foreach (KeyValuePair<string, QueueRobotUpdateEventArgs> robot in Robots_)
-                        if (robot.Value.Status == ARCLStatus.Available & robot.Value.SubStatus == ARCLSubStatus.Available)
-                            cnt++;
-                    return cnt;
-                }
+                int cnt = 0;
+                foreach (KeyValuePair<string, QueueRobotUpdateEventArgs> robot in Robots)
+                    if (robot.Value.Status == ARCLStatus.Available & robot.Value.SubStatus == ARCLSubStatus.Available)
+                        cnt++;
+                return cnt;
             }
         }
-        public int RobotsUnAvailable => RobotCount - RobotsAvailable;
+        public int RobotsUnAvailable => Robots.Count() - RobotsAvailable;
         public bool IsRunning { get; private set; } = false;
 
         /// <summary>
@@ -91,8 +71,7 @@ namespace ARCL
                 return;
             }
 
-            lock (RobotsDictLock)
-                Robots_.Clear();
+            Robots.Clear();
 
             Connection.ConnectState += Connection_ConnectState;
             Connection.QueueRobotUpdate += Connection_QueueRobotUpdate;
@@ -137,16 +116,14 @@ namespace ARCL
                 return;
             }
 
-            lock (RobotsDictLock)
+            if (!Robots.ContainsKey(data.Name))
             {
-                if (!Robots_.ContainsKey(data.Name))
-                {
-                    Robots_.Add(data.Name, data);
-                    if (IsSynced) IsSynced = false;
-                }
-                else
-                    Robots_[data.Name] = data;
+                while (Robots.TryAdd(data.Name, data)) { Robots.Locked = false; }
+                if (IsSynced)
+                    IsSynced = false;
             }
+            else
+                Robots[data.Name] = data;
         }
         private void QueueShowRobot() => Connection.Write("queueShowRobot");
         private void QueueShowRobotThread(object sender)

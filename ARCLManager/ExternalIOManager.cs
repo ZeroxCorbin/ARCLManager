@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -23,17 +22,7 @@ namespace ARCL
         private ARCLConnection Connection { get; set; }
         private bool IsIOUpdate { get; set; } = false;
 
-        public ConcurrentDictionary<string, ExtIOSet> ActiveSets { get; } = new ConcurrentDictionary<string, ExtIOSet>(10, 100);
-        //public ReadOnlyDictionary<string, ExtIOSet> ActiveSets
-        //{
-        //    get
-        //    {
-        //        Monitor.Enter(ActiveSetsLock);
-        //        return new ReadOnlyDictionary<string, ExtIOSet>(_ActiveSets);
-        //    }
-        //}
-        //private object ActiveSetsLock { get; } = new object();
-        //public void ReleaseActiveSetLock() => Monitor.Exit(ActiveSetsLock);
+        public ReadOnlyConcurrentDictionary<string, ExtIOSet> ActiveSets { get; } = new ReadOnlyConcurrentDictionary<string, ExtIOSet>(10, 100);
 
         public ReadOnlyDictionary<string, ExtIOSet> DesiredSets { get; }
         private Dictionary<string, ExtIOSet> InProcessSets { get; set; } = new Dictionary<string, ExtIOSet>();
@@ -72,25 +61,16 @@ namespace ARCL
             bool res = false;
             if (!IsSynced) return false;
 
-            //try
-            //{
-                //ReadOnlyDictionary<string, ExtIOSet> temp = ActiveSets;
+            if (inputs.Count() < ActiveSets.Count())
+                return false;
 
-                if (inputs.Count() < ActiveSets.Count())
-                    return false;
-
-                int i = 0;
-                foreach (KeyValuePair<string, ExtIOSet> set in ActiveSets)
-                {
-                    set.Value.Inputs = new List<byte> { inputs[i++] };
-                    set.Value.AddedForPendingUpdate = true;
-                    res &= Connection.Write(set.Value.WriteInputCommand);
-                }
-            //}
-            //finally
-            //{
-            //    ReleaseActiveSetLock();
-            //}
+            int i = 0;
+            foreach (KeyValuePair<string, ExtIOSet> set in ActiveSets)
+            {
+                set.Value.Inputs = new List<byte> { inputs[i++] };
+                set.Value.AddedForPendingUpdate = true;
+                res &= Connection.Write(set.Value.WriteInputCommand);
+            }
 
             return res ^= true;
         }
@@ -98,9 +78,8 @@ namespace ARCL
 
         private bool Dump()
         {
-            //lock (ActiveSetsLock)
-                foreach (KeyValuePair<string, ExtIOSet> set in ActiveSets)
-                    set.Value.AddedForPendingUpdate = true;
+            foreach (KeyValuePair<string, ExtIOSet> set in ActiveSets)
+                set.Value.AddedForPendingUpdate = true;
 
             return Connection.Write("extIODump");
         }
@@ -169,19 +148,18 @@ namespace ARCL
             if (data.ExtIOSet.IsDump)
             {
                 IsIOUpdate = false;
-                //lock (ActiveSetsLock)
-                //{
-                    if (ActiveSets.ContainsKey(data.ExtIOSet.Name))
-                        ActiveSets[data.ExtIOSet.Name] = data.ExtIOSet;
-                    else
-                    {
-                        while (!ActiveSets.TryAdd(data.ExtIOSet.Name, data.ExtIOSet)) { }
-                        IsIOUpdate = true;
-                    }
 
-                    foreach (KeyValuePair<string, ExtIOSet> set in ActiveSets)
-                        IsIOUpdate |= set.Value.AddedForPendingUpdate;
-                //}
+                if (ActiveSets.ContainsKey(data.ExtIOSet.Name))
+                    ActiveSets[data.ExtIOSet.Name] = data.ExtIOSet;
+                else
+                {
+                    while (!ActiveSets.TryAdd(data.ExtIOSet.Name, data.ExtIOSet)) { ActiveSets.Locked = false; }
+
+                    IsIOUpdate = true;
+                }
+
+                foreach (KeyValuePair<string, ExtIOSet> set in ActiveSets)
+                    IsIOUpdate |= set.Value.AddedForPendingUpdate;
 
                 if (IsSynced)
                     if (!IsIOUpdate)
@@ -193,19 +171,17 @@ namespace ARCL
             if (data.ExtIOSet.HasInputs)
             {
                 IsIOUpdate = false;
-                //lock (ActiveSetsLock)
-                //{
-                    if (ActiveSets.ContainsKey(data.ExtIOSet.Name))
-                    {
-                        ActiveSets[data.ExtIOSet.Name].Inputs = data.ExtIOSet.Inputs;
-                        ActiveSets[data.ExtIOSet.Name].AddedForPendingUpdate = false;
-                    }
-                    else
-                        IsIOUpdate = true;
 
-                    foreach (KeyValuePair<string, ExtIOSet> set in ActiveSets)
-                        IsIOUpdate |= set.Value.AddedForPendingUpdate;
-                //}
+                if (ActiveSets.ContainsKey(data.ExtIOSet.Name))
+                {
+                    ActiveSets[data.ExtIOSet.Name].Inputs = data.ExtIOSet.Inputs;
+                    ActiveSets[data.ExtIOSet.Name].AddedForPendingUpdate = false;
+                }
+                else
+                    IsIOUpdate = true;
+
+                foreach (KeyValuePair<string, ExtIOSet> set in ActiveSets)
+                    IsIOUpdate |= set.Value.AddedForPendingUpdate;
 
                 if (!IsIOUpdate)
                     Connection.Queue(false, new Action(() => InSync?.Invoke(this, true)));

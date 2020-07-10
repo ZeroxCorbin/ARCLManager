@@ -30,8 +30,7 @@ namespace ARCL
         public delegate void JobCompleteEventHandler(object sender, QueueJobUpdateEventArgs data);
         public event JobCompleteEventHandler JobComplete;
 
-        public ConcurrentDictionary<string, QueueManagerJob> Jobs { get; private set; } = new ConcurrentDictionary<string, QueueManagerJob>(10, 100);
-        //public ReadOnlyDictionary<string, QueueManagerJob> Jobs => new ReadOnlyDictionary<string, QueueManagerJob>(_Jobs);
+        public ReadOnlyConcurrentDictionary<string, QueueManagerJob> Jobs { get; private set; } = new ReadOnlyConcurrentDictionary<string, QueueManagerJob>(10, 100);
 
         //Public
         public QueueJobManager(ARCLConnection connection) => Connection = connection;
@@ -138,20 +137,20 @@ namespace ARCL
             if (!Jobs.ContainsKey(data.JobID))
             {
                 QueueManagerJob job = new QueueManagerJob(data);
-                while (!Jobs.TryAdd(job.ID, job)) { }
+                while (!Jobs.TryAdd(job.ID, job)) { Jobs.Locked = false; }
             }
             else
             {
                 int i = 0;
                 bool found = false;
-                foreach (QueueJobUpdateEventArgs currentQue in Jobs[data.JobID].Goals.ToList())
+                foreach (QueueJobUpdateEventArgs currentQue in Jobs[data.JobID].Goals)
                 {
                     if (currentQue.ID.Equals(data.ID))
                     {
                         Jobs[data.JobID].Goals[i] = data;
                         found = true;
+                        break;
                     }
-
                     i++;
                 }
 
@@ -161,7 +160,7 @@ namespace ARCL
 
             if (Jobs[data.JobID].Status == ARCLStatus.Completed || Jobs[data.JobID].Status == ARCLStatus.Cancelled)
             {
-                while (!Jobs.TryRemove(data.JobID, out QueueManagerJob job)) { }
+                while (!Jobs.TryRemove(data.JobID, out QueueManagerJob job)) { Jobs.Locked = false; }
 
                 Connection.Queue(false, new Action(() => JobComplete?.Invoke(new object(), data)));
             }

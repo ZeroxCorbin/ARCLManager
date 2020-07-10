@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 
 namespace ARCLTypes
 {
@@ -27,6 +28,24 @@ namespace ARCLTypes
     //QueueUpdate: <id> <jobId> <priority> <status=Pending> <substatus=ID_<id>> Goal <”goal2”>
     //             <robotName> <queued date> <queued time> <completed date = None > < completed time=None>
     //             <failed count>
+    public class ReadOnlyConcurrentDictionary<TKey, TValue> : ConcurrentDictionary<TKey, TValue>
+    {
+        public bool Locked { get; set; } = true;
+        public ReadOnlyConcurrentDictionary(int concurrencyLevel, int capacity) : base(concurrencyLevel, capacity) { }
+        public new bool TryAdd(TKey key, TValue value)
+        {
+            if (Locked) return false;
+            Locked = true;
+            return base.TryAdd(key, value);
+        }
+        public new bool TryRemove(TKey key, out TValue value)
+        {
+            value = default;
+            if (Locked) return false;
+            Locked = true;
+            return base.TryRemove(key, out value);
+        }
+    }
 
     public enum ARCLJobStatusRequestTypes
     {
