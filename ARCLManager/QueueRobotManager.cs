@@ -119,13 +119,7 @@ namespace ARCL
 
          if (!Robots.ContainsKey(data.Name))
          {
-            // PHW The while would always exit because Robots.Locked must be false prior to tryadd
-            Robots.Locked = false;
-            if (Robots.TryAdd(data.Name, data))
-               Debug.WriteLine("Problem adding " + data.Name + " to the Robots Read only list");
-            Robots.Locked = true;
-
-            //while (Robots.TryAdd(data.Name, data)) { Robots.Locked = false; }
+            while (!Robots.TryAdd(data.Name, data)) { Robots.Locked = false; }
 
             if (IsSynced)
                IsSynced = false;
