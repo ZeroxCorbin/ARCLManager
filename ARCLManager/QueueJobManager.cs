@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
@@ -29,16 +30,8 @@ namespace ARCL
         public delegate void JobCompleteEventHandler(object sender, QueueJobUpdateEventArgs data);
         public event JobCompleteEventHandler JobComplete;
 
-        public Dictionary<string, QueueManagerJob> _Jobs { get; private set; }
-        public ReadOnlyDictionary<string, QueueManagerJob> Jobs
-        {
-            get
-            {
-                lock (JobsLock)
-                    return new ReadOnlyDictionary<string, QueueManagerJob>(_Jobs);
-            }
-        }
-        private object JobsLock { get; set; } = new object();
+        public ConcurrentDictionary<string, QueueManagerJob> Jobs { get; private set; } = new ConcurrentDictionary<string, QueueManagerJob>(10, 100);
+        //public ReadOnlyDictionary<string, QueueManagerJob> Jobs => new ReadOnlyDictionary<string, QueueManagerJob>(_Jobs);
 
         //Public
         public QueueJobManager(ARCLConnection connection) => Connection = connection;
@@ -55,7 +48,7 @@ namespace ARCL
 
             Connection.QueueJobUpdate += Connection_QueueJobUpdate;
 
-            _Jobs = new Dictionary<string, QueueManagerJob>();
+            //_Jobs = new Dictionary<string, QueueManagerJob>();
 
             //Initiate the the load of the current queue
             QueueShow();
@@ -134,45 +127,43 @@ namespace ARCL
         private bool QueueCancel(string type, string value) => Connection.Write($"queueCancel {type} {value}");
         private void Connection_QueueJobUpdate(object sender, QueueJobUpdateEventArgs data)
         {
-            lock (JobsLock)
+            if (data.IsEnd & !IsSynced)
             {
-                if (data.IsEnd & !IsSynced)
-                {
-                    IsSynced = true;
-                    Connection.Queue(false, new Action(() => InSync?.Invoke(this, true)));
-                    return;
-                }
-                if (data.IsEnd) return;
+                IsSynced = true;
+                Connection.Queue(false, new Action(() => InSync?.Invoke(this, true)));
+                return;
+            }
+            if (data.IsEnd) return;
 
-                if (!_Jobs.ContainsKey(data.JobID))
+            if (!Jobs.ContainsKey(data.JobID))
+            {
+                QueueManagerJob job = new QueueManagerJob(data);
+                while (!Jobs.TryAdd(job.ID, job)) { }
+            }
+            else
+            {
+                int i = 0;
+                bool found = false;
+                foreach (QueueJobUpdateEventArgs currentQue in Jobs[data.JobID].Goals.ToList())
                 {
-                    QueueManagerJob job = new QueueManagerJob(data);
-                    _Jobs.Add(job.ID, job);
-                }
-                else
-                {
-                    int i = 0;
-                    bool found = false;
-                    foreach (QueueJobUpdateEventArgs currentQue in _Jobs[data.JobID].Goals.ToList())
+                    if (currentQue.ID.Equals(data.ID))
                     {
-                        if (currentQue.ID.Equals(data.ID))
-                        {
-                            _Jobs[data.JobID].Goals[i] = data;
-                            found = true;
-                        }
-
-                        i++;
+                        Jobs[data.JobID].Goals[i] = data;
+                        found = true;
                     }
 
-                    if (!found)
-                        _Jobs[data.JobID].AddGoal(data);
+                    i++;
                 }
 
-                if (_Jobs[data.JobID].Status == ARCLStatus.Completed || _Jobs[data.JobID].Status == ARCLStatus.Cancelled)
-                {
-                    _Jobs.Remove(data.JobID);
-                    Connection.Queue(false, new Action(() => JobComplete?.Invoke(new object(), data)));
-                }
+                if (!found)
+                    Jobs[data.JobID].AddGoal(data);
+            }
+
+            if (Jobs[data.JobID].Status == ARCLStatus.Completed || Jobs[data.JobID].Status == ARCLStatus.Cancelled)
+            {
+                while (!Jobs.TryRemove(data.JobID, out QueueManagerJob job)) { }
+
+                Connection.Queue(false, new Action(() => JobComplete?.Invoke(new object(), data)));
             }
         }
     }

@@ -318,8 +318,9 @@ namespace ARCL
                 }
             }
             count = ((count + 1) / 2);
+#if TRACE 
             Console.WriteLine("Num of extins: " + count);
-
+#endif
 
             if (count == numIn)
             {
@@ -343,8 +344,9 @@ namespace ARCL
                 }
             }
             count = ((count + 1) / 2);
+#if TRACE
             Console.WriteLine("Num of extouts: " + count);
-
+#endif
             if (count == numOut)
             {
                 existsOut = true;
@@ -414,7 +416,9 @@ namespace ARCL
         /// <returns>True if external IO exists</returns>
         public void defaultExtIO(string name, int numIn, int numOut)
         {
+#if TRACE
             Console.WriteLine("Setting IO to defaults.");
+#endif
             Write("configStart\r\n");
             Write("configAdd Section External Digital Inputs\r\n");
             for (int i = 1; i <= numIn; i++)
@@ -567,7 +571,9 @@ namespace ARCL
             _value = (Convert.ToInt32(Convert.ToString(_value, 2).PadLeft(Length, '0')));
             _value = ~value & 0xf;
             _value &= _valuePrev;
+#if TRACE
             Console.WriteLine("Writing: " + string.Format("extIOOutputUpdate {0} {1}\r\n", output, _value));
+#endif
             Write(string.Format("extIOOutputUpdate {0} {1}\r\n", output, _value));
 
         }
