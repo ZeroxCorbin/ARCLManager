@@ -65,7 +65,7 @@ namespace ARCL
             if (data.IsEnd)
             {
                 IsSynced = true;
-                Connection.Queue(false, new Action(() => InSync?.Invoke(this, InProcessSectionName)));
+                Connection.QueueTask(false, new Action(() => InSync?.Invoke(this, InProcessSectionName)));
                 InProcessSectionName = null;
             }
         }

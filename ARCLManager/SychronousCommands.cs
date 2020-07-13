@@ -17,10 +17,10 @@ namespace ARCL
             List<string> dev = new List<string>();
 
             this.Write("rangeDeviceList");
-            System.Threading.Thread.Sleep(500);
 
-            string msg = this.Read();
-            string[] rawDevices = msg.Split('\r');
+            string msg = this.Read("");
+
+            string[] rawDevices = msg.Split('\n');
 
             foreach (string s in rawDevices)
             {

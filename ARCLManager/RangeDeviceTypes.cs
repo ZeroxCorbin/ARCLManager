@@ -6,31 +6,16 @@ using System.Threading.Tasks;
 
 namespace ARCLTypes
 {
-    public interface IRangeDevice
-    {
-        string Name { get; }
-        int LaserNumber { get; }
-        RangeDeviceUpdateEventArgs CurrentReadings { get; set; }
-        RangeDeviceUpdateEventArgs CumulativeReadings { get; set; }
-    }
-
-    //public class RangeDeviceDX : IRangeDevice
+    //public interface IRangeDevice
     //{
-    //    public string Name { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-    //    public int LaserNumber { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-    //    public Matrix World { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-    //    public RangeDeviceUpdateEventArgs CurrentReadings { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-    //    public RangeDeviceUpdateEventArgs CumulativeReadings { get => throw new NotImplementedException(); set => throw new NotImplementedException(); }
-
-    //    public RangeDeviceDX(string name)
-    //    {
-    //        Name = name;
-
-    //        int idx = Name.IndexOf('_') + 1;
-    //        LaserNumber = int.Parse(Name.Substring(idx));
-    //    }
+    //    string Name { get; }
+    //    int LaserNumber { get; }
+    //    RangeDeviceUpdateEventArgs CurrentReadings { get; set; }
+    //    RangeDeviceUpdateEventArgs CumulativeReadings { get; set; }
     //}
-    public class RangeDevice : IRangeDevice
+
+
+    public class RangeDevice
     {
         public string Name { get; }
         public int LaserNumber { get; }

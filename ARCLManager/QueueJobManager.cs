@@ -2,8 +2,10 @@
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using ARCLTypes;
 
 namespace ARCL
@@ -27,10 +29,11 @@ namespace ARCL
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="data"></param>
-        public delegate void JobCompleteEventHandler(object sender, QueueJobUpdateEventArgs data);
+        public delegate void JobCompleteEventHandler(object sender, QueueManagerJobSegment data);
         public event JobCompleteEventHandler JobComplete;
 
         public ReadOnlyConcurrentDictionary<string, QueueManagerJob> Jobs { get; private set; } = new ReadOnlyConcurrentDictionary<string, QueueManagerJob>(10, 100);
+        private object JobUpdateLock { get; set; } = new object();
 
         //Public
         public QueueJobManager(ARCLConnection connection) => Connection = connection;
@@ -61,7 +64,7 @@ namespace ARCL
             Connection.StopReceiveAsync();
         }
 
-        public bool QueueMulti(List<QueueJobUpdateEventArgs> goals)
+        public bool QueueMulti(List<QueueManagerJobSegment> segments)
         {
             StringBuilder msg = new StringBuilder();
             string space = " ";
@@ -69,37 +72,52 @@ namespace ARCL
             msg.Append("QueueMulti");
             msg.Append(space);
 
-            msg.Append(goals.Count.ToString());
+            msg.Append(segments.Count.ToString());
             msg.Append(space);
 
             msg.Append("2");
             msg.Append(space);
 
-            foreach (QueueJobUpdateEventArgs g in goals)
+            foreach (QueueManagerJobSegment g in segments)
             {
                 msg.Append(g.GoalName);
                 msg.Append(space);
 
-                msg.Append(Enum.GetName(typeof(QueueJobUpdateEventArgs.GoalTypes), g.GoalType));
+                msg.Append(Enum.GetName(typeof(QueueManagerJobSegment.Types), g.Type));
                 msg.Append(space);
 
                 msg.Append(g.Priority.ToString());
                 msg.Append(space);
             }
 
-            if (!string.IsNullOrEmpty(goals[0].JobID))
-                msg.Append(goals[0].JobID);
+            if (!string.IsNullOrEmpty(segments[0].JobID))
+                msg.Append(segments[0].JobID);
 
             return Connection.Write(msg.ToString());
         }
-        public bool UpdateJobSegment(ref QueueManagerJob job, string newGoalName, int segmentIndex = 1)
+        /// <summary>
+        /// Modify a the goal of a job segment.
+        /// </summary>
+        /// <param name="jobID">The ID of the job to be updated.</param>
+        /// <param name="newGoalName">The new goal name for the segment being modified.</param>
+        /// <param name="segmentID">The ID of the segment to be mdified with the new goal name.</param>
+        /// <param name="timeout">Wait (timeout) ms for the segment to change.</param>
+        /// <returns>Returns true if the segment is modified.
+        /// Returns false if it takes longer than (timeout) ms to modify the segment.</returns>
+        public bool ModifySegment(string jobID, string newGoalName, string segmentID, int timeout = 10000)
         {
-            switch (job.Goals[segmentIndex].Status)
+            if (!Jobs.ContainsKey(jobID))
+                return false;
+
+            if (!Jobs[jobID].Segments.ContainsKey(segmentID))
+                return false;
+
+            switch (Jobs[jobID].Segments[segmentID].Status)
             {
                 case ARCLStatus.Pending:
                     break;
                 case ARCLStatus.InProgress:
-                    switch (job.Goals[segmentIndex].SubStatus)
+                    switch (Jobs[jobID].Segments[segmentID].SubStatus)
                     {
                         case ARCLSubStatus.UnAllocated:
                         case ARCLSubStatus.Allocated:
@@ -113,56 +131,101 @@ namespace ARCL
                     return false;
             }
 
-            QueueModify(job.Goals[segmentIndex].ID, "goal", newGoalName);
+            QueueModify(Jobs[jobID].Segments[segmentID].ID, "goal", newGoalName);
 
-            return true;
+            Stopwatch sw = new Stopwatch();
+            sw.Restart();
+
+            while (Jobs[jobID].Segments[segmentID].GoalName != newGoalName)
+            {
+                if (sw.ElapsedMilliseconds > timeout)
+                    break;
+            }
+
+            if (Jobs[jobID].Segments[segmentID].GoalName.Equals(newGoalName))
+                return true;
+            else
+                return false;
         }
-        public bool CancelJob(ref QueueManagerJob job) => QueueCancel("job", job.ID);
+        /// <summary>
+        /// Cancel a job in the queue.
+        /// </summary>
+        /// <param name="jobID">The ID of the job to be cancelled.</param>
+        /// <returns>Returns true if the job is removed from the Jobs dictionary or the jobID is not in the dictionary.
+        /// Returns false if it takes longer than (timeout) ms to remove the job from the Jobs dictionary.</returns>
+        public bool CancelJob(string jobID, int timeout = 10000)
+        {
+            if (Jobs.ContainsKey(jobID))
+                QueueCancel("jobid", jobID);
+            else
+                return true;
 
+            Stopwatch sw = new Stopwatch();
+            sw.Restart();
+
+            while (Jobs.ContainsKey(jobID))
+            {
+                if (sw.ElapsedMilliseconds > timeout)
+                    break;
+            }
+
+            if (Jobs.ContainsKey(jobID))
+                return false;
+            else
+                return true;
+        }
         //Private
         private bool QueueShow() => Connection.Write("QueueShow");
         private bool QueueShow(ARCLJobStatusRequestTypes status) => Connection.Write($"queueShow status {status}");
         private bool QueueModify(string id, string type, string value) => Connection.Write($"queueModify {id} {type} {value}");
         private bool QueueCancel(string type, string value) => Connection.Write($"queueCancel {type} {value}");
-        private void Connection_QueueJobUpdate(object sender, QueueJobUpdateEventArgs data)
+
+
+        private void Connection_QueueJobUpdate(object sender, QueueManagerJobSegment data)
         {
             if (data.IsEnd & !IsSynced)
             {
                 IsSynced = true;
-                Connection.Queue(false, new Action(() => InSync?.Invoke(this, true)));
+                Connection.QueueTask(false, new Action(() => InSync?.Invoke(this, true)));
                 return;
             }
             if (data.IsEnd) return;
 
-            if (!Jobs.ContainsKey(data.JobID))
+            lock (JobUpdateLock)
             {
-                QueueManagerJob job = new QueueManagerJob(data);
-                while (!Jobs.TryAdd(job.ID, job)) { Jobs.Locked = false; }
-            }
-            else
-            {
-                int i = 0;
-                bool found = false;
-                foreach (QueueJobUpdateEventArgs currentQue in Jobs[data.JobID].Goals)
+                if (!Jobs.ContainsKey(data.JobID))
                 {
-                    if (currentQue.ID.Equals(data.ID))
+
+                    QueueManagerJob job = new QueueManagerJob(data);
+                    while (!Jobs.TryAdd(job.ID, job)) { Jobs.Locked = false; }
+
+                }
+                else
+                {
+                    int i = 0;
+                    bool found = false;
+                    foreach (KeyValuePair<string, QueueManagerJobSegment> seg in Jobs[data.JobID].Segments)
                     {
-                        Jobs[data.JobID].Goals[i] = data;
-                        found = true;
-                        break;
+                        if (seg.Value.ID.Equals(data.ID))
+                        {
+                            Thread.Sleep(1);
+                            Jobs[data.JobID].Segments[seg.Key] = data;
+                            found = true;
+                            break;
+                        }
+                        i++;
                     }
-                    i++;
+
+                    if (!found)
+                        Jobs[data.JobID].AddSegment(data);
                 }
 
-                if (!found)
-                    Jobs[data.JobID].AddGoal(data);
-            }
+                if (Jobs[data.JobID].Status == ARCLStatus.Completed || Jobs[data.JobID].Status == ARCLStatus.Cancelled)
+                {
+                    while (!Jobs.TryRemove(data.JobID, out QueueManagerJob job)) { Jobs.Locked = false; }
 
-            if (Jobs[data.JobID].Status == ARCLStatus.Completed || Jobs[data.JobID].Status == ARCLStatus.Cancelled)
-            {
-                while (!Jobs.TryRemove(data.JobID, out QueueManagerJob job)) { Jobs.Locked = false; }
-
-                Connection.Queue(false, new Action(() => JobComplete?.Invoke(new object(), data)));
+                    Connection.QueueTask(false, new Action(() => JobComplete?.Invoke(new object(), data)));
+                }
             }
         }
     }

@@ -271,14 +271,6 @@ namespace ARCLTypes
 
         }
     }
-    public class StatusDelayedEventArgs : EventArgs
-    {
-        public bool Delayed = false;
-        public StatusDelayedEventArgs(bool delayed)
-        {
-            Delayed = delayed;
-        }
-    }
 
     public class ExtIOUpdateParseException : Exception
     {

@@ -91,7 +91,7 @@ namespace ARCL
          if (IsSynced)
          {
             IsSynced = false;
-            Connection.Queue(false, new Action(() => InSync?.Invoke(this, false)));
+            Connection.QueueTask(false, new Action(() => InSync?.Invoke(this, false)));
          }
 
          Connection.ConnectState -= Connection_ConnectState;
@@ -112,7 +112,7 @@ namespace ARCL
             if (!IsSynced)
             {
                IsSynced = true;
-               Connection.Queue(false, new Action(() => InSync?.Invoke(this, true)));
+               Connection.QueueTask(false, new Action(() => InSync?.Invoke(this, true)));
             }
             return;
          }

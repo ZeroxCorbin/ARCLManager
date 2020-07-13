@@ -33,7 +33,7 @@ namespace ARCL
         /// </summary>
         /// <param name="sender">Will always be "this".</param>
         /// <param name="data">Job information.</param>
-        public delegate void QueueJobEventHandler(object sender, QueueJobUpdateEventArgs data);
+        public delegate void QueueJobEventHandler(object sender, QueueManagerJobSegment data);
         /// <summary>
         /// A message that starts with "Queue" or "EndQueue" and does not contain "Robot".
         /// </summary>
@@ -91,13 +91,13 @@ namespace ARCL
                     base.DataReceived += Connection_DataReceived;
                     base.ConnectState += ARCLConnection_ConnectState;
 
-                    this.Queue(false, new Action(() => ConnectState?.Invoke(this, true)));
+                    this.QueueTask(false, new Action(() => ConnectState?.Invoke(this, true)));
 
                     return true;
                 }
             }
 
-            this.Queue(false, new Action(() => ConnectState?.Invoke(this, false)));
+            this.QueueTask(false, new Action(() => ConnectState?.Invoke(this, false)));
             return false;
         }
 
@@ -106,7 +106,7 @@ namespace ARCL
             if (!state)
                 base.ConnectState -= ARCLConnection_ConnectState;
 
-            this.Queue(false, new Action(() => ConnectState?.Invoke(sender, state)));
+            this.QueueTask(false, new Action(() => ConnectState?.Invoke(sender, state)));
         }
         /// <summary>
         /// Writes the message to the ARCL server.
@@ -155,43 +155,43 @@ namespace ARCL
                 string message = msg.Trim('\r');
                 if ((message.StartsWith("QueueRobot", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndQueueShowRobot", StringComparison.CurrentCultureIgnoreCase)))
                 {
-                    this.Queue(false, new Action(() => QueueRobotUpdate?.Invoke(this, new QueueRobotUpdateEventArgs(message))));
+                    this.QueueTask(false, new Action(() => QueueRobotUpdate?.Invoke(this, new QueueRobotUpdateEventArgs(message))));
                     continue;
                 }
 
                 if ((message.StartsWith("QueueShow", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndQueueShow", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("QueueUpdate", StringComparison.CurrentCultureIgnoreCase)))
                 {
-                    this.Queue(false, new Action(() => QueueJobUpdate?.Invoke(this, new QueueJobUpdateEventArgs(message))));
+                    this.QueueTask(false, new Action(() => QueueJobUpdate?.Invoke(this, new QueueManagerJobSegment(message))));
                     continue;
                 }
 
                 if (message.StartsWith("ExtIO", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndExtIO", StringComparison.CurrentCultureIgnoreCase))
                 {
-                    this.Queue(false, new Action(() => ExternalIOUpdate?.Invoke(this, new ExternalIOUpdateEventArgs(message))));
+                    this.QueueTask(false, new Action(() => ExternalIOUpdate?.Invoke(this, new ExternalIOUpdateEventArgs(message))));
                     continue;
                 }
 
                 if (message.StartsWith("getconfigsection", StringComparison.CurrentCultureIgnoreCase) | message.StartsWith("endofgetconfigsection", StringComparison.CurrentCultureIgnoreCase))
                 {
-                    this.Queue(false, new Action(() => ConfigSectionUpdate?.Invoke(this, new ConfigSectionUpdateEventArgs(message))));
+                    this.QueueTask(false, new Action(() => ConfigSectionUpdate?.Invoke(this, new ConfigSectionUpdateEventArgs(message))));
                     continue;
                 }
 
                 if (message.StartsWith("Status:"))
                 {
-                    this.Queue(false, new Action(() => StatusUpdate?.Invoke(this, new StatusUpdateEventArgs(message))));
+                    this.QueueTask(false, new Action(() => StatusUpdate?.Invoke(this, new StatusUpdateEventArgs(message))));
                     continue;
                 }
 
                 if (message.StartsWith("RangeDeviceGetCurrent:"))
                 {
-                    this.Queue(false, new Action(() => RangeDeviceCurrentUpdate?.Invoke(this, new RangeDeviceUpdateEventArgs(message))));
+                    this.QueueTask(false, new Action(() => RangeDeviceCurrentUpdate?.Invoke(this, new RangeDeviceUpdateEventArgs(message))));
                     continue;
                 }
 
                 if (message.StartsWith("RangeDeviceGetCumulative:"))
                 {
-                    this.Queue(false, new Action(() => RangeDeviceCumulativeUpdate?.Invoke(this, new RangeDeviceUpdateEventArgs(message))));
+                    this.QueueTask(false, new Action(() => RangeDeviceCumulativeUpdate?.Invoke(this, new RangeDeviceUpdateEventArgs(message))));
                     continue;
                 }
             }

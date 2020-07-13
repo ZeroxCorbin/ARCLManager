@@ -51,7 +51,7 @@ namespace ARCL
             if (IsSynced)
             {
                 IsSynced = false;
-                Connection.Queue(false, new Action(() => InSync?.Invoke(this, false)));
+                Connection.QueueTask(false, new Action(() => InSync?.Invoke(this, false)));
             }
         }
 
@@ -139,7 +139,7 @@ namespace ARCL
                     if (!IsSynced)
                     {
                         IsSynced = true;
-                        Connection.Queue(false, new Action(() => InSync?.Invoke(this, IsSynced)));
+                        Connection.QueueTask(false, new Action(() => InSync?.Invoke(this, IsSynced)));
                     }
                 }
                 return;
@@ -163,7 +163,7 @@ namespace ARCL
 
                 if (IsSynced)
                     if (!IsIOUpdate)
-                        Connection.Queue(false, new Action(() => InSync?.Invoke(this, true)));
+                        Connection.QueueTask(false, new Action(() => InSync?.Invoke(this, true)));
 
                 return;
             }
@@ -184,7 +184,7 @@ namespace ARCL
                     IsIOUpdate |= set.Value.AddedForPendingUpdate;
 
                 if (!IsIOUpdate)
-                    Connection.Queue(false, new Action(() => InSync?.Invoke(this, true)));
+                    Connection.QueueTask(false, new Action(() => InSync?.Invoke(this, true)));
 
                 return;
             }

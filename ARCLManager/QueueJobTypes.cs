@@ -3,9 +3,9 @@ using System.Collections.Generic;
 
 namespace ARCLTypes
 {
-    public class QueueJobUpdateEventArgs : EventArgs
+    public class QueueManagerJobSegment : EventArgs
     {
-        public enum GoalTypes
+        public enum Types
         {
             pickup,
             dropoff
@@ -13,7 +13,7 @@ namespace ARCLTypes
 
         public string Message { get; }
         public string ID { get; }
-        public GoalTypes GoalType { get; }
+        public Types Type { get; }
         public int Order { get; }
         public string JobID { get; }
         public int Priority { get; }
@@ -26,19 +26,19 @@ namespace ARCLTypes
         public int FailCount { get; }
         public bool IsEnd { get; }
 
-        public QueueJobUpdateEventArgs(string jobID, string goalName, GoalTypes goalType, int priority = 10)
+        public QueueManagerJobSegment(string jobID, string goalName, Types type, int priority = 10)
         {
             JobID = jobID;
 
             GoalName = goalName;
             Priority = priority;
-            GoalType = goalType;
+            Type = type;
 
             Status = ARCLStatus.Pending;
             SubStatus = ARCLSubStatus.None;
         }
 
-        public QueueJobUpdateEventArgs(string msg)
+        public QueueManagerJobSegment(string msg)
         {
             Message = msg;
 
@@ -69,7 +69,7 @@ namespace ARCLTypes
 
                     if (ID.StartsWith("PICKUP"))
                     {
-                        GoalType = GoalTypes.pickup;
+                        Type = Types.pickup;
                         if (int.TryParse(ID.Replace("PICKUP", ""), out int val))
                             Order = val;
                         else
@@ -78,7 +78,7 @@ namespace ARCLTypes
                     }
                     else if (ID.StartsWith("DROPOFF"))
                     {
-                        GoalType = GoalTypes.dropoff;
+                        Type = Types.dropoff;
                         if (int.TryParse(ID.Replace("DROPOFF", ""), out int val))
                             Order = val;
                         else
@@ -114,7 +114,7 @@ namespace ARCLTypes
 
                     if (ID.StartsWith("PICKUP"))
                     {
-                        GoalType = GoalTypes.pickup;
+                        Type = Types.pickup;
                         if (int.TryParse(ID.Replace("PICKUP", ""), out int val))
                             Order = val;
                         else
@@ -123,7 +123,7 @@ namespace ARCLTypes
                     }
                     else if (ID.StartsWith("DROPOFF"))
                     {
-                        GoalType = GoalTypes.dropoff;
+                        Type = Types.dropoff;
                         if (int.TryParse(ID.Replace("DROPOFF", ""), out int val))
                             Order = val;
                         else
@@ -194,48 +194,37 @@ namespace ARCLTypes
     public class QueueManagerJob
     {
         public string ID { get; }
-        public int Priority
+        public int SegmentCount => Segments.Count;
+
+        public QueueManagerJobSegment CurrentSegment
         {
             get
             {
-                if (Goals.Count > 0)
-                    return Goals[0].Priority;
-                else
-                    return 0;
-            }
-        }
-
-        public int GoalCount => Goals.Count;
-
-        public QueueJobUpdateEventArgs CurrentGoal
-        {
-            get
-            {
-                if (Goals.Count > 0)
+                if (Segments.Count > 0)
                 {
-                    foreach (QueueJobUpdateEventArgs que in Goals)
+                    foreach (KeyValuePair<string, QueueManagerJobSegment> que in Segments)
                     {
-                        if (que.Status != ARCLStatus.Completed)
-                            return que;
+                        if (que.Value.Status != ARCLStatus.Completed)
+                            return que.Value;
                     }
-                    return Goals[Goals.Count - 1];
+                    return null;
                 }
                 else
                     return null;
             }
         }
-        public List<QueueJobUpdateEventArgs> Goals { get; private set; } = new List<QueueJobUpdateEventArgs>();
+        public ReadOnlyConcurrentDictionary<string, QueueManagerJobSegment> Segments { get; private set; } = new ReadOnlyConcurrentDictionary<string, QueueManagerJobSegment>(10, 100);
 
         public ARCLStatus Status
         {
             get
             {
-                if (Goals.Count > 0)
+                if (Segments.Count > 0)
                 {
-                    foreach (QueueJobUpdateEventArgs que in Goals)
+                    foreach (KeyValuePair<string, QueueManagerJobSegment> que in Segments)
                     {
-                        if (que.Status != ARCLStatus.Completed)
-                            return que.Status;
+                        if (que.Value.Status != ARCLStatus.Completed)
+                            return que.Value.Status;
                     }
                     return ARCLStatus.Completed;
                 }
@@ -247,12 +236,12 @@ namespace ARCLTypes
         {
             get
             {
-                if (Goals.Count > 0)
+                if (Segments.Count > 0)
                 {
-                    foreach (QueueJobUpdateEventArgs que in Goals)
+                    foreach (KeyValuePair<string, QueueManagerJobSegment> que in Segments)
                     {
-                        if (que.Status != ARCLStatus.Completed)
-                            return que.SubStatus;
+                        if (que.Value.Status != ARCLStatus.Completed)
+                            return que.Value.SubStatus;
                     }
                     return ARCLSubStatus.None;
                 }
@@ -260,42 +249,19 @@ namespace ARCLTypes
                     return ARCLSubStatus.None;
             }
         }
-        public DateTime StartedOn
-        {
-            get
-            {
-                if (Goals.Count > 0)
-                    return Goals[0].StartedOn;
-                else
-                    return new DateTime();
-            }
-        }
-        public DateTime CompletedOn
-        {
-            get
-            {
-                if (Goals.Count > 0)
-                    return Goals[Goals.Count - 1].CompletedOn;
-                else
-                    return new DateTime();
-            }
-        }
 
         public QueueManagerJob(string id) => ID = id;
 
-        public QueueManagerJob(QueueJobUpdateEventArgs goal)
+        public QueueManagerJob(QueueManagerJobSegment segment)
         {
-            ID = goal.JobID;
-            AddQueAndSort(goal);
+            ID = segment.JobID;
+            while (!Segments.TryAdd(segment.ID, segment)) { Segments.Locked = false; }
         }
-
-        public void AddGoal(QueueJobUpdateEventArgs goal) => AddQueAndSort(goal);
-        private void AddQueAndSort(QueueJobUpdateEventArgs goal)
+        public void AddSegment(QueueManagerJobSegment segment)
         {
-            Goals.Add(goal);
-            Goals.Sort((foo1, foo2) => foo2.Order.CompareTo(foo1.Order));
+            while (!Segments.TryAdd(segment.ID, segment)) { Segments.Locked = false; };
         }
-    }
+}
     public class QueueManagerJobCompleteEventArgs : EventArgs
     {
         public QueueManagerJob Job { get; }

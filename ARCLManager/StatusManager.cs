@@ -18,115 +18,107 @@ namespace ARCL
         public delegate void RangeDeviceCumulativeUpdateEventHandler(object sender, RangeDeviceUpdateEventArgs data);
         public event RangeDeviceCumulativeUpdateEventHandler RangeDeviceCumulativeUpdate;
 
-        public delegate void StatusDelayedEventHandler(StatusDelayedEventArgs data);
+        public delegate void StatusDelayedEventHandler(bool state);
         public event StatusDelayedEventHandler StatusDelayed;
 
-        //Private
-        private ARCLConnection Connection { get; }
-        private Stopwatch Stopwatch { get; } = new Stopwatch();
-
         //Public Read-only
-        public int UpdateRate { get; private set; } = 50;
+        public RangeDeviceManager RangeDeviceManager { get; private set; }
         public bool IsRunning { get; private set; } = false;
-        public long TTL { get; private set; }
         public bool IsDelayed { get; private set; } = false;
+        public long TTL { get; private set; }
 
         //Private
-        private bool Heartbeat = false;
-        public List<string> Devices { get; private set; } = new List<string>();
+        private int UpdateRate { get; set; }
+        private Stopwatch Stopwatch { get; } = new Stopwatch();
+        private bool Heartbeat { get; set; } = false;
 
-        //Public
-        public StatusManager(ARCLConnection connection)
-        {
-            Connection = connection;
-        }
+        private ARCLConnection Connection { get; }
+        public StatusManager(ARCLConnection connection) => Connection = connection;
 
-        public void Start(int updateRate, List<string> devices)
+        public void Start(int updateRate, bool useRangeDevices = true)
         {
+            if (useRangeDevices)
+                RangeDeviceManager = new RangeDeviceManager(Connection, this);
+
             if (!Connection.IsReceivingAsync)
                 Connection.ReceiveAsync();
 
             UpdateRate = updateRate;
-            Devices = devices;
 
-            IsRunning = true;
-            ThreadPool.QueueUserWorkItem(new WaitCallback(AsyncThread_DoWork));
-
-            Connection.StatusUpdate += Connection_StatusUpdate;
-            Connection.RangeDeviceCurrentUpdate += Connection_RangeDeviceCurrentUpdate;
-            Connection.RangeDeviceCumulativeUpdate += Connection_RangeDeviceCumulativeUpdate;
-        }
-        private void Connection_StatusUpdate(object sender, StatusUpdateEventArgs data)
-        { 
-            Heartbeat = true;
-            TTL = Stopwatch.ElapsedMilliseconds;
-
-            StatusUpdate?.Invoke(sender, data);
-        }
-
-
-        public void Start(int updateRate)
-        {
-            if (!Connection.IsReceivingAsync)
-                Connection.ReceiveAsync();
-
-            UpdateRate = updateRate;
-            Devices.Clear();
-
-            IsRunning = true;
-            ThreadPool.QueueUserWorkItem(new WaitCallback(AsyncThread_DoWork));
-
-            Connection.StatusUpdate += Connection_StatusUpdate;
-            Connection.RangeDeviceCurrentUpdate += Connection_RangeDeviceCurrentUpdate;
-            Connection.RangeDeviceCumulativeUpdate += Connection_RangeDeviceCumulativeUpdate;
+            Connection.QueueTask(false, new Action(() => StatusUpdate_Thread()));
         }
         public void Stop()
         {
-            Connection.StatusUpdate -= Connection_StatusUpdate;
-            Connection.RangeDeviceCurrentUpdate -= Connection_RangeDeviceCurrentUpdate;
-            Connection.RangeDeviceCumulativeUpdate -= Connection_RangeDeviceCumulativeUpdate;
-
             IsRunning = false;
             Thread.Sleep(UpdateRate + 100);
 
-            Devices.Clear();
+            if (RangeDeviceManager == null)
+                return;
+
+            RangeDeviceManager.Stop();
+            RangeDeviceManager = null;
         }
 
         //Private
-        private void AsyncThread_DoWork(object sender)
+        private void Connection_StatusUpdate(object sender, StatusUpdateEventArgs data)
         {
-            while (IsRunning)
+            Heartbeat = true;
+            TTL = Stopwatch.ElapsedMilliseconds;
+
+            Connection.QueueTask(false, new Action(() => StatusUpdate?.Invoke(sender, data)));
+        }
+
+        private void StatusUpdate_Thread()
+        {
+            IsRunning = true;
+            Connection.StatusUpdate += Connection_StatusUpdate;
+
+            try
             {
-                if(!IsDelayed) Stopwatch.Reset();
-
-                Connection.Write("onelinestatus");
-                foreach (string l in Devices)
+                while (IsRunning)
                 {
-                    Connection.Write("rangeDeviceGetCurrent " + l);
-                }
-                foreach (string l in Devices)
-                {
-                    Connection.Write("rangeDeviceGetCumulative " + l);
-                }
+                    if (!IsDelayed)
+                        Stopwatch.Reset();
 
-                Heartbeat = false;
+                    Connection.Write("onelinestatus");
 
-                Thread.Sleep(UpdateRate);
+                    if (RangeDeviceManager != null)
+                    {
+                        foreach (string l in RangeDeviceManager.DeviceNames)
+                            Connection.Write("rangeDeviceGetCurrent " + l);
 
-                if (Heartbeat)
-                {
-                    if(IsDelayed) StatusDelayed?.Invoke(new StatusDelayedEventArgs(false));
-                    IsDelayed = false;
-                }
-                else
-                {
-                    if (!IsDelayed) StatusDelayed?.Invoke(new StatusDelayedEventArgs(true));
-                    IsDelayed = true;
+                        foreach (string l in RangeDeviceManager.DeviceNames)
+                            Connection.Write("rangeDeviceGetCumulative " + l);
+                    }
+
+                    Heartbeat = false;
+
+                    Thread.Sleep(UpdateRate);
+
+                    if (Heartbeat)
+                    {
+                        if (IsDelayed)
+                        {
+                            IsDelayed = false;
+                            Connection.QueueTask(false, new Action(() => StatusDelayed?.Invoke(false)));
+                        }
+                    }
+                    else
+                    {
+                        if (!IsDelayed)
+                        {
+                            IsDelayed = true;
+                            Connection.QueueTask(false, new Action(() => StatusDelayed?.Invoke(true)));
+                        }
+                    }
                 }
             }
+            finally
+            {
+                IsRunning = false;
+                Connection.StatusUpdate -= Connection_StatusUpdate;
+            }
         }
-        private void Connection_RangeDeviceCurrentUpdate(object sender, RangeDeviceUpdateEventArgs data) => RangeDeviceCurrentUpdate?.Invoke(sender, data);
-        private void Connection_RangeDeviceCumulativeUpdate(object sender, RangeDeviceUpdateEventArgs data)=> RangeDeviceCumulativeUpdate?.Invoke(sender, data);
     }
 }
 
