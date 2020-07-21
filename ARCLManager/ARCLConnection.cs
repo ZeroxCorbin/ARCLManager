@@ -53,11 +53,14 @@ namespace ARCL
         public delegate void StatusUpdateEventHandler(object sender, StatusUpdateEventArgs data);
         public event StatusUpdateEventHandler StatusUpdate;
 
-        public delegate void RangeDeviceCurrentUpdateEventHandler(object sender, RangeDeviceUpdateEventArgs data);
+        public delegate void RangeDeviceCurrentUpdateEventHandler(object sender, RangeDeviceReadingUpdateEventArgs data);
         public event RangeDeviceCurrentUpdateEventHandler RangeDeviceCurrentUpdate;
 
-        public delegate void RangeDeviceCumulativeUpdateEventHandler(object sender, RangeDeviceUpdateEventArgs data);
+        public delegate void RangeDeviceCumulativeUpdateEventHandler(object sender, RangeDeviceReadingUpdateEventArgs data);
         public event RangeDeviceCumulativeUpdateEventHandler RangeDeviceCumulativeUpdate;
+
+        public delegate void RangeDeviceEventHandler(object sender, RangeDeviceEventArgs device);
+        public event RangeDeviceEventHandler RangeDevice;
 
         /// <summary>
         /// A message that starts with "ExtIO" or "EndExtIO".
@@ -91,13 +94,17 @@ namespace ARCL
                     base.DataReceived += Connection_DataReceived;
                     base.ConnectState += ARCLConnection_ConnectState;
 
-                    this.QueueTask(false, new Action(() => ConnectState?.Invoke(this, true)));
+                    this.QueueTask("State", false, new Action(() => ConnectState?.Invoke(this, true)));
 
                     return true;
                 }
+                else
+                    base.Close();
             }
+            else
+                base.Close();
 
-            this.QueueTask(false, new Action(() => ConnectState?.Invoke(this, false)));
+            this.QueueTask("State", false, new Action(() => ConnectState?.Invoke(this, false)));
             return false;
         }
 
@@ -106,7 +113,7 @@ namespace ARCL
             if (!state)
                 base.ConnectState -= ARCLConnection_ConnectState;
 
-            this.QueueTask(false, new Action(() => ConnectState?.Invoke(sender, state)));
+            this.QueueTask("State", false, new Action(() => ConnectState?.Invoke(sender, state)));
         }
         /// <summary>
         /// Writes the message to the ARCL server.
@@ -136,7 +143,9 @@ namespace ARCL
         /// <returns>Success/Fail</returns>
         private bool Login()
         {
-            Read();
+            string msg = Read();
+            if (!msg.StartsWith("Enter password"))
+                return false;
 
             Write(Password);
             string rm = Read("End of commands\r\n");
@@ -155,43 +164,49 @@ namespace ARCL
                 string message = msg.Trim('\r');
                 if ((message.StartsWith("QueueRobot", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndQueueShowRobot", StringComparison.CurrentCultureIgnoreCase)))
                 {
-                    this.QueueTask(false, new Action(() => QueueRobotUpdate?.Invoke(this, new QueueRobotUpdateEventArgs(message))));
+                    this.QueueTask("QueueRobot", false, new Action(() => QueueRobotUpdate?.Invoke(this, new QueueRobotUpdateEventArgs(message))));
                     continue;
                 }
 
                 if ((message.StartsWith("QueueShow", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndQueueShow", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("QueueUpdate", StringComparison.CurrentCultureIgnoreCase)))
                 {
-                    this.QueueTask(false, new Action(() => QueueJobUpdate?.Invoke(this, new QueueManagerJobSegment(message))));
+                    this.QueueTask("QueueShow", false, new Action(() => QueueJobUpdate?.Invoke(this, new QueueManagerJobSegment(message))));
                     continue;
                 }
 
-                if (message.StartsWith("ExtIO", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndExtIO", StringComparison.CurrentCultureIgnoreCase))
+                if ((message.StartsWith("ExtIO", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndExtIO", StringComparison.CurrentCultureIgnoreCase)) && !message.Contains("Needed"))
                 {
-                    this.QueueTask(false, new Action(() => ExternalIOUpdate?.Invoke(this, new ExternalIOUpdateEventArgs(message))));
+                    this.QueueTask("ExtIO", false, new Action(() => ExternalIOUpdate?.Invoke(this, new ExternalIOUpdateEventArgs(message))));
                     continue;
                 }
 
-                if (message.StartsWith("getconfigsection", StringComparison.CurrentCultureIgnoreCase) | message.StartsWith("endofgetconfigsection", StringComparison.CurrentCultureIgnoreCase))
+                if (message.StartsWith("GetConfigSection", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndOfGetConfigSection", StringComparison.CurrentCultureIgnoreCase))
                 {
-                    this.QueueTask(false, new Action(() => ConfigSectionUpdate?.Invoke(this, new ConfigSectionUpdateEventArgs(message))));
+                    this.QueueTask("GetConfigSection", false, new Action(() => ConfigSectionUpdate?.Invoke(this, new ConfigSectionUpdateEventArgs(message))));
                     continue;
                 }
 
                 if (message.StartsWith("Status:"))
                 {
-                    this.QueueTask(false, new Action(() => StatusUpdate?.Invoke(this, new StatusUpdateEventArgs(message))));
+                    this.QueueTask("Status", false, new Action(() => StatusUpdate?.Invoke(this, new StatusUpdateEventArgs(message)))); ;
                     continue;
                 }
 
-                if (message.StartsWith("RangeDeviceGetCurrent:"))
+                if (message.StartsWith("RangeDeviceGetCurrent:", StringComparison.CurrentCultureIgnoreCase))
                 {
-                    this.QueueTask(false, new Action(() => RangeDeviceCurrentUpdate?.Invoke(this, new RangeDeviceUpdateEventArgs(message))));
+                    this.QueueTask("RangeDeviceGetCurrent", false, new Action(() => RangeDeviceCurrentUpdate?.Invoke(this, new RangeDeviceReadingUpdateEventArgs(message))));
                     continue;
                 }
 
-                if (message.StartsWith("RangeDeviceGetCumulative:"))
+                if (message.StartsWith("RangeDeviceGetCumulative:", StringComparison.CurrentCultureIgnoreCase))
                 {
-                    this.QueueTask(false, new Action(() => RangeDeviceCumulativeUpdate?.Invoke(this, new RangeDeviceUpdateEventArgs(message))));
+                    this.QueueTask("RangeDeviceGetCumulative", false, new Action(() => RangeDeviceCumulativeUpdate?.Invoke(this, new RangeDeviceReadingUpdateEventArgs(message))));
+                    continue;
+                }
+
+                if (message.StartsWith("RangeDevice", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndOfRangeDeviceList", StringComparison.CurrentCultureIgnoreCase))
+                {
+                    this.QueueTask("RangeDevice", false, new Action(() => RangeDevice?.Invoke(this, new RangeDeviceEventArgs(message))));
                     continue;
                 }
             }

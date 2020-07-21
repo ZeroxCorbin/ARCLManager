@@ -12,10 +12,10 @@ namespace ARCL
         public delegate void StatusUpdateEventHandler(object sender, StatusUpdateEventArgs data);
         public event StatusUpdateEventHandler StatusUpdate;
 
-        public delegate void RangeDeviceCurrentReceivedEventHandler(object sender, RangeDeviceUpdateEventArgs data);
+        public delegate void RangeDeviceCurrentReceivedEventHandler(object sender, RangeDeviceReadingUpdateEventArgs data);
         public event RangeDeviceCurrentReceivedEventHandler RangeDeviceCurrentUpdate;
 
-        public delegate void RangeDeviceCumulativeUpdateEventHandler(object sender, RangeDeviceUpdateEventArgs data);
+        public delegate void RangeDeviceCumulativeUpdateEventHandler(object sender, RangeDeviceReadingUpdateEventArgs data);
         public event RangeDeviceCumulativeUpdateEventHandler RangeDeviceCumulativeUpdate;
 
         public delegate void StatusDelayedEventHandler(bool state);
@@ -35,15 +35,15 @@ namespace ARCL
         private ARCLConnection Connection { get; }
         public StatusManager(ARCLConnection connection) => Connection = connection;
 
-        public void Start(int updateRate, bool useRangeDevices = true)
+        public void Start(int updateRate)
         {
-            if (useRangeDevices)
-                RangeDeviceManager = new RangeDeviceManager(Connection, this);
+            UpdateRate = updateRate;
+
+            RangeDeviceManager = new RangeDeviceManager(Connection, this);
+            RangeDeviceManager.Start();
 
             if (!Connection.IsReceivingAsync)
                 Connection.ReceiveAsync();
-
-            UpdateRate = updateRate;
 
             Connection.QueueTask(false, new Action(() => StatusUpdate_Thread()));
         }

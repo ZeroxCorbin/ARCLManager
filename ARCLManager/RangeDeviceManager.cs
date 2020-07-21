@@ -25,27 +25,16 @@ namespace ARCL
         }
         
         public ReadOnlyConcurrentDictionary<string, RangeDevice> Devices { get; private set; } = new ReadOnlyConcurrentDictionary<string, RangeDevice>(10, 100);
-        public List<string> DeviceNames { get; private set; }
+        public List<string> DeviceNames => (List<string>)Devices.Keys;
 
         public bool Start()
         {
-            using (SychronousCommands sync = new SychronousCommands(Connection.ConnectionString))
-            {
-                if (!sync.Connect())
-                    return false;
-                DeviceNames = sync.GetRangeDevices();
-            }
-
-            if (DeviceNames.Count == 0)
+            if (!Connection.IsConnected)
                 return false;
 
-            foreach (string str in DeviceNames)
-                while (!Devices.TryAdd(str, new RangeDevice(str))) { Devices.Locked = false; }
-            
-            Connection.RangeDeviceCurrentUpdate += Connection_RangeDeviceCurrentUpdate;
-            Connection.RangeDeviceCumulativeUpdate += Connection_RangeDeviceCumulativeUpdate;
+            Connection.RangeDevice += Connection_RangeDevice;
 
-            return true;
+            return RangeDeviceList();
         }
 
         public void Stop()
@@ -53,26 +42,46 @@ namespace ARCL
             if (IsSynced)
             {
                 IsSynced = false;
-                Connection.QueueTask(false, new Action(() => InSync?.Invoke(this, false)));
+                Connection.QueueTask(false, new Action(() => InSync?.Invoke(this, IsSynced)));
             }
 
             Status.Stop();
 
             Connection.RangeDeviceCurrentUpdate -= Connection_RangeDeviceCurrentUpdate;
             Connection.RangeDeviceCumulativeUpdate -= Connection_RangeDeviceCumulativeUpdate;
+            Connection.RangeDevice -= Connection_RangeDevice;
 
             Connection?.StopReceiveAsync();
 
             Devices.Clear();
         }
 
-        private void Connection_RangeDeviceCurrentUpdate(object sender, ARCLTypes.RangeDeviceUpdateEventArgs data)
+        private void Connection_RangeDevice(object sender, RangeDeviceEventArgs device)
+        {
+            if(device.IsEnd)
+            {
+                Connection.RangeDevice -= Connection_RangeDevice;
+
+                Connection.RangeDeviceCurrentUpdate += Connection_RangeDeviceCurrentUpdate;
+                Connection.RangeDeviceCumulativeUpdate += Connection_RangeDeviceCumulativeUpdate;
+
+                IsSynced = true;
+                Connection.QueueTask(false, new Action(() => InSync?.Invoke(this, IsSynced)));
+                return;
+            }
+            while (!Devices.TryAdd(device.RangeDevice.Name, device.RangeDevice)) { Devices.Locked = false; }
+        }
+
+        private bool RangeDeviceList() => Connection.Write("rangeDeviceList");
+
+
+        private void Connection_RangeDeviceCurrentUpdate(object sender, ARCLTypes.RangeDeviceReadingUpdateEventArgs data)
         {
             if (Devices.ContainsKey(data.Name))
                 Devices[data.Name].CumulativeReadings = data;
         }
 
-        private void Connection_RangeDeviceCumulativeUpdate(object sender, ARCLTypes.RangeDeviceUpdateEventArgs data)
+        private void Connection_RangeDeviceCumulativeUpdate(object sender, ARCLTypes.RangeDeviceReadingUpdateEventArgs data)
         {
             if (Devices.ContainsKey(data.Name))
                 Devices[data.Name].CurrentReadings = data;

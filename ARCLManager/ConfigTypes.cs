@@ -71,6 +71,8 @@ namespace ARCLTypes
         {
             foreach (ConfigSection cs in sections)
             {
+                if (cs == null)
+                    continue;
                 if (cs.Name.Contains("Radius")) Radius = float.Parse(cs.Value);
                 if (cs.Name.Contains("Width")) Width = float.Parse(cs.Value);
                 if (cs.Name.Contains("LengthFront")) LengthFront = float.Parse(cs.Value);

@@ -20,7 +20,7 @@ namespace ARCL
 
         private ARCLConnection Connection { get; set; }
 
-        private Dictionary<string, List<ConfigSection>> _Sections { get; set; }
+        private Dictionary<string, List<ConfigSection>> _Sections { get; set; } = new Dictionary<string, List<ConfigSection>>();
         public ReadOnlyDictionary<string, List<ConfigSection>> Sections { get { lock (SectionsLockObject) return new ReadOnlyDictionary<string, List<ConfigSection>>(_Sections); } }
         private object SectionsLockObject { get; set; } = new object();
 
@@ -59,15 +59,17 @@ namespace ARCL
         {
             if (InProcessSectionName == null) return;
 
-            lock (SectionsLockObject)
-                _Sections[InProcessSectionName].Add(data.Section);
-
             if (data.IsEnd)
             {
                 IsSynced = true;
                 Connection.QueueTask(false, new Action(() => InSync?.Invoke(this, InProcessSectionName)));
                 InProcessSectionName = null;
+                return;
             }
+
+            lock (SectionsLockObject)
+                _Sections[InProcessSectionName].Add(data.Section);
+
         }
     }
 }

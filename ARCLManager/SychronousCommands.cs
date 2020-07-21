@@ -1,4 +1,5 @@
 ﻿using ARCL;
+using ARCLTypes;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -12,11 +13,13 @@ namespace ARCL
         //Public
         public SychronousCommands(string connectionString) : base(connectionString) { }
 
-        public List<string> GetRangeDevices()
+        public List<RangeDevice> GetRangeDevices()
         {
-            List<string> dev = new List<string>();
+            List<RangeDevice> dev = new List<RangeDevice>();
 
             this.Write("rangeDeviceList");
+
+            Thread.Sleep(500);
 
             string msg = this.Read("");
 
@@ -24,14 +27,16 @@ namespace ARCL
 
             foreach (string s in rawDevices)
             {
-                if (s.IndexOf("RangeDeviceCumulativeDrawingData: ") >= 0)
-                {
-                    string devStr = s.Replace("RangeDeviceCumulativeDrawingData: ", String.Empty);
-                    devStr = devStr.Trim(new char[] { '\n', '\r' });
-                    string[] devSpl = devStr.Split();
+                dev.Add(new RangeDevice(s));
 
-                    dev.Add(devSpl[0]);
-                }
+                //if (s.StartsWith("RangeDeviceCumulativeDrawingData:", StringComparison.CurrentCultureIgnoreCase) && s.Contains("Laser", StringComparison.CurrentCultureIgnoreCase))
+                //{
+                //    string devStr = s.Replace("RangeDeviceCumulativeDrawingData: ", String.Empty);
+                //    devStr = devStr.Trim(new char[] { '\n', '\r' });
+                //    string[] devSpl = devStr.Split();
+
+                //    dev.Add(devSpl[0]);
+                //}
             }
 
             return dev;
@@ -506,7 +511,7 @@ namespace ARCL
         /// Method to run soft signals in a background thread. Set SoftIO for this to work.
         /// </summary>
         /// <param name="sender"></param>
-        public void softSignal(object sender)
+        public void softSignal()
         {
             string ioName = SoftIO;
 
