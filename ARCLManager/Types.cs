@@ -61,7 +61,7 @@ namespace ARCLTypes
     {
         Pending,
         Available,
-        AvailableForJob,
+        AvailableForJobs,
         Interrupted,
         InProgress,
         Completed,
@@ -84,7 +84,7 @@ namespace ARCLTypes
         ID_PICKUP,
         ID_DROPOFF,
         Available,
-        AvailableForJob,
+        AvailableForJobs,
         Parking,
         Parked,
         DockParking,
