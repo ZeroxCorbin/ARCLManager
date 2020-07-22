@@ -56,20 +56,18 @@ namespace ARCL
         }
 
         public bool ReadActiveSets() => Dump();
-        public bool WriteAllInputs(List<byte> inputs)
+        public bool WriteAllInputs()
         {
             bool res = false;
             if (!IsSynced) return false;
 
-            if (inputs.Count() < ActiveSets.Count())
+            if (ActiveSets.Count() < 1)
                 return false;
 
-            int i = 0;
-            foreach (KeyValuePair<string, ExtIOSet> set in ActiveSets)
+            for(int i = 1; i <= ActiveSets.Count(); i++)
             {
-                set.Value.Inputs = new List<byte> { inputs[i++] };
-                set.Value.AddedForPendingUpdate = true;
-                res &= Connection.Write(set.Value.WriteInputCommand);
+                ActiveSets[i.ToString()].AddedForPendingUpdate = true;
+                res &= Connection.Write(ActiveSets[i.ToString()].WriteInputCommand);
             }
 
             return res ^= true;
