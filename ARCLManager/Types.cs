@@ -111,7 +111,8 @@ namespace ARCLTypes
         InterruptedButNotYetIdle,
         OutgoingARCLConnLost,
         ModeIsLocked,
-        Cancelled_by_MobilePlanner
+        Cancelled_by_MobilePlanner,
+        CustomUser
     }
 
 
@@ -124,6 +125,7 @@ namespace ARCLTypes
         public string Name { get; private set; }
         public ARCLStatus Status { get; private set; }
         public ARCLSubStatus SubStatus { get; private set; }
+        public string SubStatusCustomUser { get; private set; } = string.Empty;
         public bool IsEnd { get; private set; }
         public QueueRobotUpdateEventArgs(string msg)
         {
@@ -147,7 +149,10 @@ namespace ARCLTypes
             if (Enum.TryParse(spl[3], out ARCLSubStatus subStatus))
                 SubStatus = subStatus;
             else
-                throw new QueueRobotParseException();
+            {
+                SubStatus = ARCLSubStatus.CustomUser;
+                SubStatusCustomUser = spl[3];
+            }
         }
     }
 
