@@ -45,7 +45,7 @@ namespace ARCL
             int cnt = 0;
 
             foreach (KeyValuePair<string, QueueRobotUpdateEventArgs> robot in Robots)
-               if (robot.Value.Status == ARCLStatus.Available && robot.Value.SubStatus == ARCLSubStatus.Available)
+               if (robot.Value.Status == ARCLStatus.Available)
                   cnt++;
             return cnt;
          }
