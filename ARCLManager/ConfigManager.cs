@@ -85,9 +85,11 @@ namespace ARCL
             IsSynced = false;
 
             if (Sections.ContainsKey(sectionName))
+            {
                 Sections[sectionName].Clear();
-            else
-                Sections.Add(sectionName, new List<ConfigSection>());
+                Sections.Remove(sectionName);
+            }
+            Sections.Add(sectionName, new List<ConfigSection>());
 
             InProcessSectionName = sectionName;
 

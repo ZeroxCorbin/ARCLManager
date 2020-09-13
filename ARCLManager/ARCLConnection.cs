@@ -78,7 +78,7 @@ namespace ARCL
 
         //Public
         public ARCLConnection(string connectionString) : base(connectionString) { }
-
+        public ARCLConnection() : base() { }
         /// <summary>
         /// Connect and Login to an ARCL server.
         /// Hides SocketManager.Connect()
