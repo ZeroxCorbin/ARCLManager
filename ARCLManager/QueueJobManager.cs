@@ -46,7 +46,7 @@ namespace ARCL
         public void Start()
         {
             if (!Connection.IsReceivingAsync)
-                Connection.ReceiveAsync();
+                Connection.StartReceiveAsync();
 
             Connection.QueueJobUpdate += Connection_QueueJobUpdate;
 

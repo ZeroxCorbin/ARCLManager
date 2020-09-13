@@ -37,7 +37,7 @@ namespace ARCL
 
         public void Start()
         {
-            Connection.ReceiveAsync();
+            Connection.StartReceiveAsync();
             Connection.ExternalIOUpdate += Connection_ExternalIOUpdate;
 
             //Initiate the the load of the current ExtIO

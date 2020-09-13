@@ -43,7 +43,7 @@ namespace ARCL
             RangeDeviceManager.Start();
 
             if (!Connection.IsReceivingAsync)
-                Connection.ReceiveAsync();
+                Connection.StartReceiveAsync();
 
             Connection.QueueTask(false, new Action(() => StatusUpdate_Thread()));
         }

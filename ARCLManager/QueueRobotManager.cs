@@ -61,7 +61,7 @@ namespace ARCL
 
       /// <summary>
       /// Clears the Robots dictionary.
-      /// Calls ReceiveAsync() on the ARCLConnection. **The connection must already be made.
+      /// Calls StartReceiveAsync() on the ARCLConnection. **The connection must already be made.
       /// Initiates a QueueShowRobot command. 
       /// </summary>
       public void Start()
@@ -78,7 +78,7 @@ namespace ARCL
          Connection.QueueRobotUpdate += Connection_QueueRobotUpdate;
 
          if (!Connection.IsReceivingAsync)
-            Connection.ReceiveAsync();
+            Connection.StartReceiveAsync();
 
          ThreadPool.QueueUserWorkItem(new WaitCallback(QueueShowRobotThread));
       }

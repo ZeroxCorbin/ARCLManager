@@ -6,13 +6,22 @@ namespace ARCLTypes
     public class ConfigSection
     {
         public string Name { get; private set; }
-        public string Value { get; private set; }
-        public string Other { get; private set; }
-        public ConfigSection(string name, string value, string other)
+        public string Value { get; private set; } = string.Empty;
+        public bool IsBeginList { get; private set; } = false;
+        public bool IsEndList { get; private set; } = false;
+
+        public ConfigSection(string name, string value)
         {
             Name = name;
             Value = value;
-            Other = other;
+        }
+        public ConfigSection(string name, string value, bool isBeginList = false, bool isEndList = false)
+        {
+            Name = name;
+            Value = value;
+
+            IsBeginList = isBeginList;
+            IsEndList = isEndList;
         }
     }
     public class ConfigSectionUpdateEventArgs : EventArgs
@@ -30,13 +39,23 @@ namespace ARCLTypes
                 return;
             }
 
+            msg = msg.Replace("GetConfigSectionValue: ", "").TrimStart();
+
             string[] spl = msg.Split(' ');
 
-            string other = "";
-            for (int i = 3; i < spl.Length; i++)
-                other += " " + spl[i];
+            if(msg.Contains("_beginList"))
+                Section = new ConfigSection(spl[0], spl[1], true);
+            else if (msg.Contains("_endList"))
+                Section = new ConfigSection(spl[0], spl[1], false, true);
+            else
+            {
+                if(spl.Length == 1)
+                    Section = new ConfigSection(spl[0], "");
+                else
+                    Section = new ConfigSection(spl[0], spl[1]);
+            }
 
-            Section = new ConfigSection(spl[1], spl[2], other);
+            
         }
         //public void Update(string msg)
         //{

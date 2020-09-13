@@ -115,9 +115,6 @@ namespace ARCLTypes
         CustomUser
     }
 
-
-
-
     public class QueueRobotUpdateEventArgs : EventArgs
     {
         //QueueRobot: "robotName" robotStatus robotSubstatus echoString

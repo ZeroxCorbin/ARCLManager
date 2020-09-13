@@ -162,6 +162,13 @@ namespace ARCL
             foreach(string msg in messages)
             {
                 string message = msg.Trim('\r');
+
+                //if (message.StartsWith("CommandError:"))
+                //{
+                //    this.QueueTask("CommandError", false, new Action(() => StatusUpdate?.Invoke(this, new StatusUpdateEventArgs(message)))); ;
+                //    continue;
+                //}
+
                 if ((message.StartsWith("QueueRobot", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndQueueShowRobot", StringComparison.CurrentCultureIgnoreCase)))
                 {
                     this.QueueTask("QueueRobot", false, new Action(() => QueueRobotUpdate?.Invoke(this, new QueueRobotUpdateEventArgs(message))));
