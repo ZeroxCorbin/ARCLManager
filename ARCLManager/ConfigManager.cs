@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Text;
 using ARCLTypes;
 
@@ -22,32 +23,47 @@ namespace ARCL
         private ARCLConnection Connection { get; set; }
 
         public Dictionary<string, List<ConfigSection>> Sections { get; set; } = new Dictionary<string, List<ConfigSection>>();
-        private object SectionsLockObject { get; set; } = new object();
 
-        private string InProcessSectionName { get; set; } = null;
-
+        public ConfigManager() { }
         public ConfigManager(ARCLConnection connection) => Connection = connection;
-
-        public void Start()
+        public bool Start()
         {
-            if (!Connection.IsReceivingAsync)
-                Connection.StartReceiveAsync();
+            if (Connection == null) return false;
 
-            Connection.ConfigSectionUpdate += Connection_ConfigSectionUpdate;
+            if(!Connection.IsConnected) return false;
+
+            if (Connection.StartReceiveAsync())
+            {
+                Connection.ConfigSectionUpdate += Connection_ConfigSectionUpdate;
+                return true;
+            }
+            else
+                return false;
+           
+        }
+        public bool Start(ARCLConnection connection)
+        {
+            Connection = connection;
+            return Start();
         }
         public void Stop()
         {
+            if (Connection == null) return;
+
             Connection.ConfigSectionUpdate -= Connection_ConfigSectionUpdate;
-            Connection?.StopReceiveAsync();
+
+            Connection.StopReceiveAsync();
         }
 
-        public string SectionAsText(string sectionName)
+        private string InProcessSectionName { get; set; } = null;
+
+        public string SectionValuesToText(string sectionName)
         {
             if (!Sections.ContainsKey(sectionName)) return string.Empty;
 
             StringBuilder sb = new StringBuilder();
 
-            sb.Append($"{sectionName}\r\n");
+            sb.Append($"Section::{sectionName}\r\n");
             foreach (ConfigSection cs in Sections[sectionName])
             {
                 if (!string.IsNullOrEmpty(cs.Value))
@@ -58,29 +74,42 @@ namespace ARCL
 
             return sb.ToString();
         }
-
-        public bool TextAsSection(string sectionText)
+        public bool TextToSectionValues(string sectionText)
         {
             string[] spl = sectionText.Split('\r', '\n');
 
             if (spl.Length < 2) return false;
 
-            if (Sections.ContainsKey(spl[0]))
-                Sections[spl[0]].Clear();
-            else
-                Sections.Add(spl[0], new List<ConfigSection>());
-
-            for(int i = 1; i < spl.Length; i++)
+            string section = "";
+            foreach(string value in spl)
             {
-                if (string.IsNullOrEmpty(spl[i])) continue;
-                Sections[spl[0]].Add(new ConfigSectionUpdateEventArgs(spl[i]).Section);
+                if (string.IsNullOrEmpty(value)) continue;
+
+                if (value.StartsWith($"Section::"))
+                {
+                    section = value.Replace("Section::", "");
+
+                    if (Sections.ContainsKey(section)) 
+                        Sections[section].Clear();
+                    else
+                        Sections.Add(section, new List<ConfigSection>());
+
+                    continue;
+                }
+
+                Sections[section].Add(new ConfigSectionUpdateEventArgs(value).Section);
             }
-                
 
             return true;
         }
 
-        public bool ReadConfigSection(string sectionName)
+        public bool ReadSectionsList()
+        {
+            IsSynced = false;
+
+            return Connection.Write($"getconfigsectionlist\r\n");
+        }
+        public bool ReadSectionValues(string sectionName)
         {
             IsSynced = false;
 
@@ -91,6 +120,11 @@ namespace ARCL
             }
             Sections.Add(sectionName, new List<ConfigSection>());
 
+            Stopwatch sw = new Stopwatch();
+
+            while (InProcessSectionName != null && sw.ElapsedMilliseconds < 1000) { }
+            if (InProcessSectionName != null)
+                return false;
             InProcessSectionName = sectionName;
 
             return Connection.Write($"getconfigsectionvalues {sectionName}\r\n");
@@ -122,8 +156,6 @@ namespace ARCL
 
         private void Connection_ConfigSectionUpdate(object sender, ConfigSectionUpdateEventArgs data)
         {
-            if (InProcessSectionName == null) return;
-
             if (data.IsEnd)
             {
                 IsSynced = true;
@@ -132,9 +164,17 @@ namespace ARCL
                 return;
             }
 
-            lock (SectionsLockObject)
-                Sections[InProcessSectionName].Add(data.Section);
+            if (data.IsSectionName)
+            {
+                if (Sections.ContainsKey(data.SectionName)) return;
 
+                Sections.Add(data.SectionName, new List<ConfigSection>());
+
+                return;
+            }
+            if (InProcessSectionName == null) return;
+
+            Sections[InProcessSectionName].Add(data.Section);
         }
     }
 }

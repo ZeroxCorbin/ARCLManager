@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.ComponentModel.Design;
 using System.Diagnostics;
 using System.Linq;
 using System.Net;
@@ -91,7 +92,6 @@ namespace ARCL
             {
                 if (Login())
                 {
-                    base.DataReceived += Connection_DataReceived;
                     base.ConnectState += ARCLConnection_ConnectState;
 
                     this.QueueTask("State", false, new Action(() => ConnectState?.Invoke(this, true)));
@@ -106,6 +106,27 @@ namespace ARCL
 
             this.QueueTask("State", false, new Action(() => ConnectState?.Invoke(this, false)));
             return false;
+        }
+
+        public new void Close()
+        {
+            base.DataReceived -= Connection_DataReceived;
+
+            base.Close();
+        }
+
+        public new bool StartReceiveAsync(string messageTerminator = "\n")
+        {
+            base.DataReceived += Connection_DataReceived;
+
+            return base.StartReceiveAsync(messageTerminator);
+        }
+
+        public new void StopReceiveAsync(bool force = false)
+        {
+            base.DataReceived -= Connection_DataReceived;
+
+            base.StopReceiveAsync(force);
         }
 
         private void ARCLConnection_ConnectState(object sender, bool state)

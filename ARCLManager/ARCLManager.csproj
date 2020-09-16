@@ -2,6 +2,7 @@
 
   <PropertyGroup>
     <TargetFrameworks>netstandard2.1;net472</TargetFrameworks>
+    <Configurations>Debug;Release;ARCLManager_ConfigurationManager_Demo</Configurations>
   </PropertyGroup>
 
   <ItemGroup>

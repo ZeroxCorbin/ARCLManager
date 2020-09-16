@@ -6,7 +6,7 @@ namespace ARCLTypes
     public class ConfigSection
     {
         public string Name { get; private set; }
-        public string Value { get; private set; } = string.Empty;
+        public string Value { get; set; } = string.Empty;
         public bool IsBeginList { get; private set; } = false;
         public bool IsEndList { get; private set; } = false;
 
@@ -29,6 +29,8 @@ namespace ARCLTypes
         public string Message { get; private set; }
         public ConfigSection Section { get; private set; }
         public bool IsEnd { get; private set; }
+        public bool IsSectionName { get; private set; }
+        public string SectionName { get; private set; }
         public ConfigSectionUpdateEventArgs(string msg)
         {
             Message = msg;
@@ -36,6 +38,13 @@ namespace ARCLTypes
             if (msg.StartsWith("endof", StringComparison.CurrentCultureIgnoreCase))
             {
                 IsEnd = true;
+                return;
+            }
+
+            if (msg.StartsWith("GetConfigSectionList", StringComparison.CurrentCultureIgnoreCase))
+            {
+                SectionName = msg.Replace("GetConfigSectionList: ", "").TrimStart();
+                IsSectionName = true;
                 return;
             }
 
