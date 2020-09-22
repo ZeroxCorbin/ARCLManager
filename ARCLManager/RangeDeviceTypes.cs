@@ -71,6 +71,10 @@ namespace ARCLTypes
                 Name = spl[1];
                 if(Enum.TryParse(spl[2], out RangeDeviceLocationType result))
                     LocationType = result;
+
+                if(LocationType == RangeDeviceLocationType.LASER)
+                    LaserNumber = int.Parse(Name.Replace("Laser_", ""));
+
                 return;
             }
 

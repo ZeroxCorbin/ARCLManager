@@ -23,9 +23,17 @@ namespace ARCL
             Connection = connection;
             Status = status;
         }
-        
+
         public ReadOnlyConcurrentDictionary<string, RangeDevice> Devices { get; private set; } = new ReadOnlyConcurrentDictionary<string, RangeDevice>(10, 100);
-        public List<string> DeviceNames => (List<string>)Devices.Keys;
+        public List<string> DeviceNames
+        {
+            get
+            {
+                string[] strs = new string[Devices.Keys.Count];
+                Devices.Keys.CopyTo(strs, 0);
+                return new List<string>(strs);
+            }
+        }
 
         public bool Start()
         {
@@ -45,8 +53,6 @@ namespace ARCL
                 Connection.QueueTask(false, new Action(() => InSync?.Invoke(this, IsSynced)));
             }
 
-            Status.Stop();
-
             Connection.RangeDeviceCurrentUpdate -= Connection_RangeDeviceCurrentUpdate;
             Connection.RangeDeviceCumulativeUpdate -= Connection_RangeDeviceCumulativeUpdate;
             Connection.RangeDevice -= Connection_RangeDevice;
@@ -58,7 +64,7 @@ namespace ARCL
 
         private void Connection_RangeDevice(object sender, RangeDeviceEventArgs device)
         {
-            if(device.IsEnd)
+            if (device.IsEnd)
             {
                 Connection.RangeDevice -= Connection_RangeDevice;
 
@@ -69,7 +75,8 @@ namespace ARCL
                 Connection.QueueTask(false, new Action(() => InSync?.Invoke(this, IsSynced)));
                 return;
             }
-            while (!Devices.TryAdd(device.RangeDevice.Name, device.RangeDevice)) { Devices.Locked = false; }
+            if (!string.IsNullOrEmpty(device.RangeDevice.Name))
+                while (!Devices.TryAdd(device.RangeDevice.Name, device.RangeDevice)) { Devices.Locked = false; }
         }
 
         private bool RangeDeviceList() => Connection.Write("rangeDeviceList");
