@@ -164,7 +164,7 @@ namespace ARCL
         /// <returns>Success/Fail</returns>
         private bool Login()
         {
-            string msg = Read();
+            string msg = Read('\n');
             if (!msg.StartsWith("Enter password"))
                 return false;
 
