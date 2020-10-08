@@ -1,9 +1,22 @@
 ﻿using System;
 using System.Collections.Concurrent;
+using System.ComponentModel;
 
 namespace ARCLTypes
 {
+    public enum SyncStates
+    {
+        FALSE = -1,
+        DELAYED = 0,
+        TRUE = 1,
+    }
 
+    public class SyncStateEventArgs
+    {
+        
+        public SyncStates State { get; set; } = SyncStates.FALSE;
+        public string Message { get; set; } = "";
+    }
     //queueShow [echoString]
     //QueueRobot: <robotName> <robotStatus> <robotSubstatus> <echoString>
     //QueueRobot: "21" InProgress Driving ""

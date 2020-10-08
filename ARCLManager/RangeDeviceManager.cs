@@ -8,95 +8,151 @@ namespace ARCL
 {
     public class RangeDeviceManager
     {
-        /// <summary>
-        /// Raised when the Range Device List is syncronized.
-        /// </summary>
-        public delegate void IsSyncedEventHandler(bool state);
-        public event IsSyncedEventHandler IsSyncedEvent;
+        public delegate void SyncStateChangeEventHandler(object sender, SyncStateEventArgs syncState);
+        public event SyncStateChangeEventHandler SyncStateChange;
+        public SyncStateEventArgs SyncState { get; private set; } = new SyncStateEventArgs();
 
-        public delegate void IsDelayedEventHandler(bool state);
-        public event IsDelayedEventHandler IsDelayedEvent;
-
-        public delegate void RangeDeviceCurrentReceivedEventHandler(RangeDeviceReadingUpdateEventArgs data);
-        public event RangeDeviceCurrentReceivedEventHandler RangeDeviceCurrentUpdate;
-
-        public delegate void RangeDeviceCumulativeUpdateEventHandler(RangeDeviceReadingUpdateEventArgs data);
-        public event RangeDeviceCumulativeUpdateEventHandler RangeDeviceCumulativeUpdate;
-
-
-        /// <summary>
-        /// True when the External IO is sycronized with the EM.
-        /// </summary>
-        public bool IsSynced { get; private set; } = false;
-        public bool IsDelayed { get; private set; } = false;
         public bool IsRunning { get; private set; } = false;
+        public long TTL { get; private set; } = 0;
 
-        public long TTL { get; private set; }
-        //Private
-        private int UpdateRate { get; set; }
+        private int UpdateRate { get; set; } = 500;
         private Stopwatch Stopwatch { get; } = new Stopwatch();
         private bool Heartbeat { get; set; } = false;
 
         private ARCLConnection Connection { get; set; }
         public RangeDeviceManager(ARCLConnection connection) => Connection = connection;
 
-        public ReadOnlyConcurrentDictionary<string, RangeDevice> Devices { get; private set; } = new ReadOnlyConcurrentDictionary<string, RangeDevice>(10, 100);
-        public List<string> DeviceNames
-        {
-            get
-            {
-                string[] strs = new string[Devices.Keys.Count];
-                Devices.Keys.CopyTo(strs, 0);
-                return new List<string>(strs);
-            }
-        }
-
         public bool Start(int updateRate)
         {
             UpdateRate = updateRate;
 
-            if(!Connection.IsConnected)
+            if(Connection == null || !Connection.IsConnected)
+                return false;
+            if(!Connection.StartReceiveAsync())
                 return false;
 
-            Connection.RangeDevice += Connection_RangeDevice;
+            Start_();
 
-            return RangeDeviceList();
+            return true;
         }
+        public bool Start(int updateRate, ARCLConnection connection)
+        {
+            UpdateRate = updateRate;
+            Connection = connection;
 
+            return Start(updateRate);
+        }
         public void Stop()
         {
-            if(IsSynced)
+            if(SyncState.State != SyncStates.FALSE)
             {
-                IsSynced = false;
-                Connection.QueueTask(false, new Action(() => IsSyncedEvent?.Invoke(IsSynced)));
+                SyncState.State = SyncStates.FALSE;
+                SyncState.Message = "Stop";
+                Connection?.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
             }
+            Connection?.StopReceiveAsync();
+
+            Stop_();
+        }
+
+        private void Start_()
+        {
+            Connection.RangeDevice += Connection_RangeDevice;
+
+            Devices.Clear();
+
+            Connection.Write("rangeDeviceList");
+
+            SyncState.State = SyncStates.FALSE;
+            SyncState.Message = "RangeDeviceList";
+            Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+        }
+        private void Stop_()
+        {
+            if(Connection != null)
+                Connection.RangeDevice -= Connection_RangeDevice;
 
             IsRunning = false;
             Thread.Sleep(UpdateRate + 100);
-
-            Connection?.StopReceiveAsync();
-
-            Devices.Clear();
         }
 
+        private void RangeDeviceUpdate_Thread(object sender)
+        {
+            IsRunning = true;
+            Stopwatch.Reset();
+
+            Connection.RangeDeviceCurrentUpdate += Connection_RangeDeviceCurrentUpdate;
+            Connection.RangeDeviceCumulativeUpdate += Connection_RangeDeviceCumulativeUpdate;
+
+            try
+            {
+                while(IsRunning)
+                {
+                    if(SyncState.State == SyncStates.TRUE)
+                        Stopwatch.Reset();
+
+                    foreach(KeyValuePair<string, RangeDevice> l in Devices)
+                        Connection.Write("rangeDeviceGetCurrent " + l.Key);
+
+                    foreach(KeyValuePair<string, RangeDevice> l in Devices)
+                        Connection.Write("rangeDeviceGetCumulative " + l.Key);
+
+                    Heartbeat = false;
+
+                    Thread.Sleep(UpdateRate);
+
+                    if(Heartbeat)
+                    {
+                        if(SyncState.State != SyncStates.TRUE)
+                        {
+                            SyncState.State = SyncStates.TRUE;
+                            Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                        }
+                    }
+                    else
+                    {
+                        if(SyncState.State != SyncStates.DELAYED)
+                        {
+                            SyncState.State = SyncStates.DELAYED;
+                            Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                IsRunning = false;
+                Connection.RangeDeviceCurrentUpdate -= Connection_RangeDeviceCurrentUpdate;
+                Connection.RangeDeviceCumulativeUpdate -= Connection_RangeDeviceCumulativeUpdate;
+            }
+        }
         private void Connection_RangeDevice(object sender, RangeDeviceEventArgs device)
         {
             if(device.IsEnd)
             {
                 Connection.RangeDevice -= Connection_RangeDevice;
-
                 ThreadPool.QueueUserWorkItem(new WaitCallback(RangeDeviceUpdate_Thread));
 
-                IsSynced = true;
-
-                Connection.QueueTask(false, new Action(() => IsSyncedEvent?.Invoke(IsSynced)));
+                if(SyncState.State != SyncStates.TRUE)
+                {
+                    SyncState.State = SyncStates.TRUE;
+                    SyncState.Message = "EndRangeDeviceList";
+                    Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                }
                 return;
             }
             if(!string.IsNullOrEmpty(device.RangeDevice.Name))
                 while(!Devices.TryAdd(device.RangeDevice.Name, device.RangeDevice)) { Devices.Locked = false; }
         }
 
-        private bool RangeDeviceList() => Connection.Write("rangeDeviceList");
+
+        public ReadOnlyConcurrentDictionary<string, RangeDevice> Devices { get; private set; } = new ReadOnlyConcurrentDictionary<string, RangeDevice>(10, 100);
+
+        public delegate void RangeDeviceCurrentReceivedEventHandler(RangeDeviceReadingUpdateEventArgs data);
+        public event RangeDeviceCurrentReceivedEventHandler RangeDeviceCurrentUpdate;
+
+        public delegate void RangeDeviceCumulativeUpdateEventHandler(RangeDeviceReadingUpdateEventArgs data);
+        public event RangeDeviceCumulativeUpdateEventHandler RangeDeviceCumulativeUpdate;
 
         private void Connection_RangeDeviceCurrentUpdate(object sender, RangeDeviceReadingUpdateEventArgs data)
         {
@@ -111,7 +167,6 @@ namespace ARCL
 
             Connection.QueueTask(true, new Action(() => RangeDeviceCurrentUpdate?.Invoke(data)));
         }
-
         private void Connection_RangeDeviceCumulativeUpdate(object sender, RangeDeviceReadingUpdateEventArgs data)
         {
             if(Devices.ContainsKey(data.Name))
@@ -127,54 +182,6 @@ namespace ARCL
         }
 
 
-        private void RangeDeviceUpdate_Thread(object sender)
-        {
-            IsRunning = true;
 
-            Connection.RangeDeviceCurrentUpdate += Connection_RangeDeviceCurrentUpdate;
-            Connection.RangeDeviceCumulativeUpdate += Connection_RangeDeviceCumulativeUpdate;
-
-            try
-            {
-                while(IsRunning)
-                {
-                    if(!IsDelayed)
-                        Stopwatch.Reset();
-
-                    foreach(string l in DeviceNames)
-                        Connection.Write("rangeDeviceGetCurrent " + l);
-
-                    foreach(string l in DeviceNames)
-                        Connection.Write("rangeDeviceGetCumulative " + l);
-
-                    Heartbeat = false;
-
-                    Thread.Sleep(UpdateRate);
-
-                    if(Heartbeat)
-                    {
-                        if(IsDelayed)
-                        {
-                            IsDelayed = false;
-                            Connection.QueueTask(false, new Action(() => IsDelayedEvent?.Invoke(IsDelayed)));
-                        }
-                    }
-                    else
-                    {
-                        if(!IsDelayed)
-                        {
-                            IsDelayed = true;
-                            Connection.QueueTask(false, new Action(() => IsDelayedEvent?.Invoke(IsDelayed)));
-                        }
-                    }
-                }
-            }
-            finally
-            {
-                IsRunning = false;
-                Connection.RangeDeviceCurrentUpdate -= Connection_RangeDeviceCurrentUpdate;
-                Connection.RangeDeviceCumulativeUpdate -= Connection_RangeDeviceCumulativeUpdate;
-            }
-        }
     }
 }

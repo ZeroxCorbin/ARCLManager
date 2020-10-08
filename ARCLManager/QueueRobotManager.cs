@@ -7,159 +7,155 @@ using ARCLTypes;
 
 namespace ARCL
 {
-   public class QueueRobotManager
-   {
-      /// <summary>
-      /// Raised when the Robots list is sycronized with the EM/LD robot queue.
-      /// Raised when the connection is dropped.
-      /// </summary>
-      /// <param name="sender"></param>
-      /// <param name="state"></param>
-      public delegate void InSyncUpdateEventHandler(object sender, bool state);
-      /// <summary>
-      /// Raised when the Robots list is sycronized with the EM/LD robot queue.
-      /// Raised when the connection is dropped.
-      /// </summary>
-      public event InSyncUpdateEventHandler InSync;
-      /// <summary>
-      /// True when the Robots list is sycronized with the EM/LD robot queue.
-      /// False when the connection is dropped.
-      /// </summary>
-      public bool IsSynced { get; private set; } = false;
+    public class QueueRobotManager
+    {
+        public delegate void SyncStateChangeEventHandler(object sender, SyncStateEventArgs syncState);
+        public event SyncStateChangeEventHandler SyncStateChange;
+        public SyncStateEventArgs SyncState { get; private set; } = new SyncStateEventArgs();
 
-      private ARCLConnection Connection { get; }
+        public bool IsRunning { get; private set; } = false;
+        public long TTL { get; private set; } = 0;
 
-      /// <summary>
-      /// Dictionary of Robots in the EM/LD queue.
-      /// Not valid until InSync is true.
-      /// </summary>
-      public ReadOnlyConcurrentDictionary<string, QueueRobotUpdateEventArgs> Robots { get; set; } = new ReadOnlyConcurrentDictionary<string, QueueRobotUpdateEventArgs>(10, 100);
+        private int UpdateRate { get; set; } = 500;
+        private Stopwatch Stopwatch { get; } = new Stopwatch();
+        private bool Heartbeat { get; set; } = false;
 
-      public bool IsRobotAvailable => RobotsAvailable > 0;
-      public int RobotsAvailable
-      {
-         get
-         {
-            if (!IsSynced) return 0;
+        private ARCLConnection Connection { get; set; }
+        public QueueRobotManager(ARCLConnection connection) => Connection = connection;
 
-            int cnt = 0;
+        public bool Start(int updateRate)
+        {
+            UpdateRate = updateRate;
 
-            foreach (KeyValuePair<string, QueueRobotUpdateEventArgs> robot in Robots)
-               if (robot.Value.Status == ARCLStatus.Available)
-                  cnt++;
-            return cnt;
-         }
-      }
-      public int RobotsUnAvailable => Robots.Count() - RobotsAvailable;
-      public bool IsRunning { get; private set; } = false;
+            if(Connection == null || !Connection.IsConnected)
+                return false;
+            if(!Connection.StartReceiveAsync())
+                return false;
 
-      /// <summary>
-      /// Instantiate the class and store the ARCLConnection ref.
-      /// </summary>
-      /// <param name="connection"></param>
-      public QueueRobotManager(ARCLConnection connection) => Connection = connection;
+            Start_();
 
-      /// <summary>
-      /// Clears the Robots dictionary.
-      /// Calls StartReceiveAsync() on the ARCLConnection. **The connection must already be made.
-      /// Initiates a QueueShowRobot command. 
-      /// </summary>
-      public void Start()
-      {
-         if (!Connection.IsConnected)
-         {
-            Stop();
-            return;
-         }
+            return true;
+        }
+        public bool Start(int updateRate, ARCLConnection connection)
+        {
+            UpdateRate = updateRate;
+            Connection = connection;
 
-         Robots.Clear();
-
-         Connection.ConnectState += Connection_ConnectState;
-         Connection.QueueRobotUpdate += Connection_QueueRobotUpdate;
-
-         if (!Connection.IsReceivingAsync)
-            Connection.StartReceiveAsync();
-
-         ThreadPool.QueueUserWorkItem(new WaitCallback(QueueShowRobotThread));
-      }
-      /// <summary>
-      /// InSync is set to false.
-      /// Calls StopReceiveAsync() on the ARCLConnection 
-      /// </summary>
-      public void Stop()
-      {
-         if (IsSynced)
-         {
-            IsSynced = false;
-            Connection.QueueTask(false, new Action(() => InSync?.Invoke(this, false)));
-         }
-
-         Connection.ConnectState -= Connection_ConnectState;
-         Connection.QueueRobotUpdate -= Connection_QueueRobotUpdate;
-
-         Connection.StopReceiveAsync();
-      }
-
-      private void Connection_ConnectState(object sender, bool state)
-      {
-         if (!state)
-            Stop();
-      }
-      private void Connection_QueueRobotUpdate(object sender, QueueRobotUpdateEventArgs data)
-      {
-         if (data.IsEnd)
-         {
-            if (!IsSynced)
+            return Start(updateRate);
+        }
+        public void Stop()
+        {
+            if(SyncState.State != SyncStates.FALSE)
             {
-               IsSynced = true;
-               Connection.QueueTask(false, new Action(() => InSync?.Invoke(this, true)));
+                SyncState.State = SyncStates.FALSE;
+                SyncState.Message = "Stop";
+                Connection?.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
             }
-            return;
-         }
+            Connection?.StopReceiveAsync();
 
-         if (!Robots.ContainsKey(data.Name))
-         {
-            while (!Robots.TryAdd(data.Name, data)) { Robots.Locked = false; }
+            Stop_();
+        }
 
-            if (IsSynced)
-               IsSynced = false;
-         }
-         else
-            Robots[data.Name] = data;
-      }
-      private void QueueShowRobot() => Connection.Write("queueShowRobot");
-      private void QueueShowRobotThread(object sender)
-      {
-         while (!Connection.IsReceivingAsync) { };
+        private void Start_()
+        {
+            Robots.Clear();
 
-         try
-         {
-            IsRunning = true;
+            ThreadPool.QueueUserWorkItem(new WaitCallback(QueueShowRobot_Thread));
 
-            QueueShowRobot();
-
-            Stopwatch sw = new Stopwatch();
-
-            sw.Restart();
-            while (sw.ElapsedMilliseconds < 1000)
-            {
-               if (!Connection.IsReceivingAsync)
-               {
-                  IsRunning = false;
-                  return;
-               }
-               Thread.Sleep(10);
-            }
-         }
-         catch
-         {
+            SyncState.State = SyncStates.FALSE;
+            SyncState.Message = "QueueShowRobot";
+            Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+        }
+        private void Stop_()
+        {
             IsRunning = false;
-         }
-         finally
-         {
-            if (IsRunning)
-               ThreadPool.QueueUserWorkItem(new WaitCallback(QueueShowRobotThread));
-         }
-      }
-   }
+            Thread.Sleep(UpdateRate + 100);
+        }
+
+        private void QueueShowRobot_Thread(object sender)
+        {
+            IsRunning = true;
+            Stopwatch.Reset();
+
+            Connection.QueueRobotUpdate += Connection_QueueRobotUpdate;
+
+            try
+            {
+                while(IsRunning)
+                {
+                    if(SyncState.State == SyncStates.TRUE)
+                        Stopwatch.Reset();
+
+                    Connection.Write("queueShowRobot");
+
+                    Heartbeat = false;
+
+                    Thread.Sleep(UpdateRate);
+
+                    if(Heartbeat)
+                    {
+                        if(SyncState.State == SyncStates.DELAYED)
+                        {
+                            SyncState.State = SyncStates.TRUE;
+                            Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                        }
+                    }
+                    else
+                    {
+                        if(SyncState.State != SyncStates.DELAYED)
+                        {
+                            SyncState.State = SyncStates.DELAYED;
+                            Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                IsRunning = false;
+                Connection.QueueRobotUpdate -= Connection_QueueRobotUpdate;
+            }
+        }
+        private void Connection_QueueRobotUpdate(object sender, QueueRobotUpdateEventArgs data)
+        {
+            Heartbeat = true;
+            TTL = Stopwatch.ElapsedMilliseconds;
+
+            if(data.IsEnd)
+            {
+                if(SyncState.State != SyncStates.TRUE)
+                {
+                    SyncState.State = SyncStates.TRUE;
+                    SyncState.Message = "EndQueueShowRobot";
+                    Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                }
+                return;
+            }
+
+            if(!Robots.ContainsKey(data.Name))
+                while(!Robots.TryAdd(data.Name, data)) { Robots.Locked = false; }
+            else
+                Robots[data.Name] = data;
+        }
+
+
+        public ReadOnlyConcurrentDictionary<string, QueueRobotUpdateEventArgs> Robots { get; set; } = new ReadOnlyConcurrentDictionary<string, QueueRobotUpdateEventArgs>(10, 100);
+        public bool IsRobotAvailable => RobotsAvailable > 0;
+        public int RobotsAvailable
+        {
+            get
+            {
+                if(SyncState.State!=SyncStates.TRUE)
+                    return 0;
+
+                int cnt = 0;
+
+                foreach(KeyValuePair<string, QueueRobotUpdateEventArgs> robot in Robots)
+                    if(robot.Value.Status == ARCLStatus.Available)
+                        cnt++;
+                return cnt;
+            }
+        }
+        public int RobotsUnAvailable => Robots.Count - RobotsAvailable;
+    }
 }

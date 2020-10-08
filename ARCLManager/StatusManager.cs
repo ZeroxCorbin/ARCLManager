@@ -8,79 +8,81 @@ namespace ARCL
 {
     public class StatusManager
     {
-        public delegate void IsSyncedEventHandler(bool state);
-        public event IsSyncedEventHandler IsSyncedEvent;
+        public delegate void SyncStateChangeEventHandler(object sender, SyncStateEventArgs syncState);
+        public event SyncStateChangeEventHandler SyncStateChange;
+        public SyncStateEventArgs SyncState { get; private set; } = new SyncStateEventArgs();
 
-        public delegate void IsDelayedEventHandler(bool state);
-        public event IsDelayedEventHandler IsDelayedEvent;
-        //Public
-        public delegate void StatusUpdateEventHandler(object sender, StatusUpdateEventArgs data);
-        public event StatusUpdateEventHandler StatusUpdate;
-
-        //Public Read-only
-        public bool IsSynced { get; private set; } = false;
-        public bool IsDelayed { get; private set; } = false;
         public bool IsRunning { get; private set; } = false;
+        public long TTL { get; private set; } = 0;
 
-        public long TTL { get; private set; }
-        //Private
-        private int UpdateRate { get; set; }
+        private int UpdateRate { get; set; } = 500;
         private Stopwatch Stopwatch { get; } = new Stopwatch();
         private bool Heartbeat { get; set; } = false;
 
-        public StatusUpdateEventArgs Status { get; private set; }
-
-        private ARCLConnection Connection { get; }
+        private ARCLConnection Connection { get; set; }
         public StatusManager(ARCLConnection connection) => Connection = connection;
 
-        public void Start(int updateRate)
+        public bool Start(int updateRate)
         {
             UpdateRate = updateRate;
 
-            if (!Connection.IsReceivingAsync)
-                Connection.StartReceiveAsync();
+            if(Connection == null || !Connection.IsConnected)
+                return false;
+            if(!Connection.StartReceiveAsync())
+                return false;
 
-            ThreadPool.QueueUserWorkItem(new WaitCallback(StatusUpdate_Thread));
+            Start_();
+
+            return true;
+        }
+        public bool Start(int updateRate, ARCLConnection connection)
+        {
+            UpdateRate = updateRate;
+            Connection = connection;
+
+            return Start(updateRate);
         }
         public void Stop()
         {
-            if(IsSynced)
+            if(SyncState.State != SyncStates.FALSE)
             {
-                IsSynced = false;
-                Connection.QueueTask(false, new Action(() => IsSyncedEvent?.Invoke(IsSynced)));
+                SyncState.State = SyncStates.FALSE;
+                SyncState.Message = "Stop";
+                Connection?.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
             }
+            Connection?.StopReceiveAsync();
 
-            IsRunning = false;
-            Thread.Sleep(UpdateRate + 100);
+            Stop_();
         }
 
-        //Private
-        private void Connection_StatusUpdate(object sender, StatusUpdateEventArgs data)
+        private void Start_()
         {
-            Status = data;
+            Status = null;
 
-            if(!IsSynced)
-            {
-                IsSynced = true;
-                Connection.QueueTask(false, new Action(() => IsSyncedEvent?.Invoke(IsSynced)));
-            }
+            ThreadPool.QueueUserWorkItem(new WaitCallback(StatusUpdate_Thread));
 
-            Heartbeat = true;
-            TTL = Stopwatch.ElapsedMilliseconds;
-
-            Connection.QueueTask(false, new Action(() => StatusUpdate?.Invoke(sender, data)));
+            SyncState.State = SyncStates.FALSE;
+            SyncState.Message = "OneLineStatus";
+            Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+        }
+        private void Stop_()
+        {
+            IsRunning = false;
+            Thread.Sleep(UpdateRate + 100);
         }
 
         private void StatusUpdate_Thread(object sender)
         {
             IsRunning = true;
+            Stopwatch.Reset();
+
             Connection.StatusUpdate += Connection_StatusUpdate;
 
             try
             {
-                while (IsRunning)
+                while(IsRunning)
                 {
-                    if (!IsDelayed)
+                    if(SyncState.State == SyncStates.TRUE)
                         Stopwatch.Reset();
 
                     Connection.Write("onelinestatus");
@@ -89,20 +91,20 @@ namespace ARCL
 
                     Thread.Sleep(UpdateRate);
 
-                    if (Heartbeat)
+                    if(Heartbeat)
                     {
-                        if (IsDelayed)
+                        if(SyncState.State == SyncStates.DELAYED)
                         {
-                            IsDelayed = false;
-                            Connection.QueueTask(false, new Action(() => IsDelayedEvent?.Invoke(false)));
+                            SyncState.State = SyncStates.TRUE;
+                            Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
                         }
                     }
                     else
                     {
-                        if (!IsDelayed)
+                        if(SyncState.State != SyncStates.DELAYED)
                         {
-                            IsDelayed = true;
-                            Connection.QueueTask(false, new Action(() => IsDelayedEvent?.Invoke(true)));
+                            SyncState.State = SyncStates.DELAYED;
+                            Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
                         }
                     }
                 }
@@ -113,6 +115,29 @@ namespace ARCL
                 Connection.StatusUpdate -= Connection_StatusUpdate;
             }
         }
+        private void Connection_StatusUpdate(object sender, StatusUpdateEventArgs data)
+        {
+            Heartbeat = true;
+            TTL = Stopwatch.ElapsedMilliseconds;
+
+            Status = data;
+
+            if(SyncState.State != SyncStates.TRUE)
+            {
+                SyncState.State = SyncStates.TRUE;
+                SyncState.Message = "EndOneLineStatus";
+                Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+            }
+
+
+            Connection.QueueTask(false, new Action(() => StatusUpdate?.Invoke(sender, data)));
+        }
+
+
+        public delegate void StatusUpdateEventHandler(object sender, StatusUpdateEventArgs data);
+        public event StatusUpdateEventHandler StatusUpdate;
+
+        public StatusUpdateEventArgs Status { get; private set; } = null;
     }
 }
 
