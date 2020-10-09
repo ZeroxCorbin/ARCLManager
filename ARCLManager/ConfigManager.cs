@@ -1,8 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Text;
+using System.Threading;
 using ARCLTypes;
 
 namespace ARCL
@@ -11,6 +11,7 @@ namespace ARCL
     {
         public delegate void SyncStateChangeEventHandler(object sender, SyncStateEventArgs syncState);
         public event SyncStateChangeEventHandler SyncStateChange;
+
         public SyncStateEventArgs SyncState { get; private set; } = new SyncStateEventArgs();
 
         private ARCLConnection Connection { get; set; }
@@ -45,6 +46,15 @@ namespace ARCL
 
             Stop_();
         }
+        public bool WaitForSync(long timeout = 30000)
+        {
+            Stopwatch sw = new Stopwatch();
+            sw.Restart();
+
+            while(SyncState.State != SyncStates.TRUE & sw.ElapsedMilliseconds < timeout) { Thread.Sleep(1); }
+
+            return SyncState.State == SyncStates.TRUE;
+        }
 
         private void Start_()
         {
@@ -72,7 +82,7 @@ namespace ARCL
                 {
                     SyncState.State = SyncStates.TRUE;
                     SyncState.Message = "EndGetConfigSectionList";
-                    Connection.QueueTask(false, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                    Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
                 }
 
                 InProcessSectionName = null;
@@ -93,10 +103,9 @@ namespace ARCL
             Sections[InProcessSectionName].Add(data.Section);
         }
 
-
         public ReadOnlyConcurrentDictionary<string, List<ConfigSection>> Sections { get; set; } = new ReadOnlyConcurrentDictionary<string, List<ConfigSection>>(10,100);
+ 
         private string InProcessSectionName { get; set; } = null;
-
         public bool ReadSectionValues(string sectionName)
         {
             SyncState.State = SyncStates.DELAYED;
@@ -106,9 +115,12 @@ namespace ARCL
             if(Sections.ContainsKey(sectionName))
             {
                 Sections[sectionName].Clear();
-                //while(!Sections.TryRemove(sectionName, out List<ConfigSection> sect)) { Sections.Locked = false; }
             }
-            while(!Sections.TryAdd(sectionName, new List<ConfigSection>())) { Sections.Locked = false; }
+            else
+            {
+                 while(!Sections.TryAdd(sectionName, new List<ConfigSection>())) { Sections.Locked = false; }
+            }
+
 
             Stopwatch sw = new Stopwatch();
 
@@ -118,6 +130,29 @@ namespace ARCL
             InProcessSectionName = sectionName;
 
             return Connection.Write($"getconfigsectionvalues {sectionName}");
+        }
+        public void WriteSectionValues(string sectionName)
+        {
+            if(!Sections.ContainsKey(sectionName)) return;
+
+            Connection.Write($"configStart");
+            Connection.Write($"configAdd Section {sectionName}");
+
+            foreach(ConfigSection cs in Sections[sectionName])
+            {
+                if(!string.IsNullOrEmpty(cs.Value))
+                {
+                    if(cs.IsBeginList || cs.IsEndList)
+                        Connection.Write($"configAdd {cs.Value} {cs.Name}");
+                    else
+                        Connection.Write($"configAdd {cs.Name} {cs.Value}");
+                }
+                else
+                {
+                    Connection.Write($"configAdd {cs.Name}");
+                }
+            }
+            Connection.Write($"configParse");
         }
 
         public string SectionValuesToText(string sectionName)
@@ -165,31 +200,5 @@ namespace ARCL
 
             return true;
         }
-
-        public void WriteConfigSection(string sectionName)
-        {
-            if(!Sections.ContainsKey(sectionName)) return;
-
-            Connection.Write($"configStart");
-            Connection.Write($"configAdd Section {sectionName}");
-
-            foreach(ConfigSection cs in Sections[sectionName])
-            {
-                if(!string.IsNullOrEmpty(cs.Value))
-                {
-                    if(cs.IsBeginList || cs.IsEndList)
-                        Connection.Write($"configAdd {cs.Value} {cs.Name}");
-                    else
-                        Connection.Write($"configAdd {cs.Name} {cs.Value}");
-                }
-                else
-                {
-                    Connection.Write($"configAdd {cs.Name}");
-                }
-            }
-            Connection.Write($"configParse");
-        }
-
-
     }
 }

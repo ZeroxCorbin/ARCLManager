@@ -48,6 +48,15 @@ namespace ARCL
 
             Stop_();
         }
+        public bool WaitForSync(long timeout = 30000)
+        {
+            Stopwatch sw = new Stopwatch();
+            sw.Restart();
+
+            while(SyncState.State != SyncStates.TRUE & sw.ElapsedMilliseconds < timeout) { Thread.Sleep(1); }
+
+            return SyncState.State == SyncStates.TRUE;
+        }
 
         private void Start_()
         {

@@ -47,9 +47,8 @@ namespace ARCL
             List<string> goals = new List<string>();
 
             this.Write("getgoals");
-            System.Threading.Thread.Sleep(500);
+            string goalsString = this.Read("End of goals");
 
-            string goalsString = this.Read("");
             string[] rawGoals = goalsString.Split('\r');
 
             foreach (string s in rawGoals)
@@ -271,6 +270,7 @@ namespace ARCL
 
         public bool Goto(string goalname) => this.Write($"goto {goalname}");
         public bool GotoPoint(int x, int y, int heading) => this.Write($"gotopoint {x} {y} {heading}");
+        public bool Go() => this.Write($"go");
         public bool PatrolOnce(string routename) => this.Write($"patrolonce {routename}");
         public bool Patrol(string routename) => this.Write($"patrol {routename}");
         public bool Say(string message) => this.Write($"say {message}");
