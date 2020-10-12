@@ -7,17 +7,45 @@ using ARCLTypes;
 
 namespace ARCL
 {
+    /// <summary>
+    /// This class is used to manage the configuration of a Mobile robot or Enterprise Manager.
+    /// When you call Start() the Sections list will be loaded with all of the available configuration sections.
+    /// Call WaitForSync() to wait for the configuration sections to be loaded.
+    /// You must call ReadSectionValues(string sectionName) for each section to get it's values.
+    /// You can serialize the Sections dictionary to and from a string to store the values.
+    /// </summary>
     public class ConfigManager
     {
+        /// <summary>
+        /// The Delegate for the SyncStateChange Event.
+        /// </summary>
+        /// <param name="sender">A reference to this class.</param>
+        /// <param name="syncState">The state of the dictionary Keys. See the SyncState property for details.</param>
         public delegate void SyncStateChangeEventHandler(object sender, SyncStateEventArgs syncState);
+        /// <summary>
+        /// Raised when SyncState property changes.
+        /// See the SyncState property for details.
+        /// </summary>
         public event SyncStateChangeEventHandler SyncStateChange;
-
+        /// <summary>
+        /// The state of the dictionary.
+        /// State= WAIT; Wait to access the dictionary.
+        ///              Calling Start() or Stop() sets this state.
+        /// State= DELAYED; The dictionary Values are not valid.
+        ///                 This indicates the Values of the dictionary are being updated
+        ///                 or the Values from the ARCL Server are delayed.
+        /// State= OK; The dictionary is up to date.
+        /// </summary>
         public SyncStateEventArgs SyncState { get; private set; } = new SyncStateEventArgs();
-
+        /// <summary>
+        /// A reference to the connection to the ARCL Server.
+        /// </summary>
         private ARCLConnection Connection { get; set; }
-        public ConfigManager() { }
-        public ConfigManager(ARCLConnection connection) => Connection = connection;
-
+        /// <summary>
+        /// Start the manager.
+        /// This will load the dictionary.
+        /// </summary>
+        /// <returns>False: Connection issue.</returns>
         public bool Start()
         {
             if(Connection == null || !Connection.IsConnected)
@@ -29,16 +57,25 @@ namespace ARCL
 
             return true;
         }
+        /// <summary>
+        /// Start the manager.
+        /// This will load the dictionary.
+        /// </summary>
+        /// <param name="connection">A connected ARCLConnection.</param>
+        /// <returns>False: Connection issue.</returns>
         public bool Start(ARCLConnection connection)
         {
             Connection = connection;
             return Start();
         }
+        /// <summary>
+        /// Stop the manager.
+        /// </summary>
         public void Stop()
         {
-            if(SyncState.State != SyncStates.FALSE)
+            if(SyncState.State != SyncStates.WAIT)
             {
-                SyncState.State = SyncStates.FALSE;
+                SyncState.State = SyncStates.WAIT;
                 SyncState.Message = "Stop";
                 Connection?.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
             }
@@ -46,16 +83,25 @@ namespace ARCL
 
             Stop_();
         }
+        /// <summary>
+        /// Wait for the dictionary to be in sync with the ARCL server data.
+        /// After calling Start(), you can either call this method or wait for the SyncStateChanged event. 
+        /// </summary>
+        /// <param name="timeout">Wait for SyncState.State.OK for milliseconds.</param>
+        /// <returns>False: Timeout waiting for SyncState.State.OK.</returns>
         public bool WaitForSync(long timeout = 30000)
         {
             Stopwatch sw = new Stopwatch();
             sw.Restart();
 
-            while(SyncState.State != SyncStates.TRUE & sw.ElapsedMilliseconds < timeout) { Thread.Sleep(1); }
+            while(SyncState.State != SyncStates.OK & sw.ElapsedMilliseconds < timeout)
+            { Thread.Sleep(10); }
 
-            return SyncState.State == SyncStates.TRUE;
+            return SyncState.State == SyncStates.OK;
         }
 
+        public ConfigManager() { }
+        public ConfigManager(ARCLConnection connection) => Connection = connection
         private void Start_()
         {
             Connection.ConfigSectionUpdate += Connection_ConfigSectionUpdate;
@@ -64,7 +110,7 @@ namespace ARCL
 
             Connection.Write($"getconfigsectionlist");
 
-            SyncState.State = SyncStates.FALSE;
+            SyncState.State = SyncStates.WAIT;
             SyncState.Message = "GetConfigSectionList";
             Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
         }
@@ -78,9 +124,9 @@ namespace ARCL
         {
             if(data.IsEnd)
             {
-                if(SyncState.State != SyncStates.TRUE)
+                if(SyncState.State != SyncStates.OK)
                 {
-                    SyncState.State = SyncStates.TRUE;
+                    SyncState.State = SyncStates.OK;
                     SyncState.Message = "EndGetConfigSectionList";
                     Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
                 }
@@ -103,6 +149,9 @@ namespace ARCL
             Sections[InProcessSectionName].Add(data.Section);
         }
 
+        /// <summary>
+        /// 
+        /// </summary>
         public ReadOnlyConcurrentDictionary<string, List<ConfigSection>> Sections { get; set; } = new ReadOnlyConcurrentDictionary<string, List<ConfigSection>>(10,100);
  
         private string InProcessSectionName { get; set; } = null;

@@ -6,15 +6,15 @@ namespace ARCLTypes
 {
     public enum SyncStates
     {
-        FALSE = -1,
+        WAIT = -1,
         DELAYED = 0,
-        TRUE = 1,
+        OK = 1,
     }
 
     public class SyncStateEventArgs
     {
         
-        public SyncStates State { get; set; } = SyncStates.FALSE;
+        public SyncStates State { get; set; } = SyncStates.WAIT;
         public string Message { get; set; } = "";
     }
     //queueShow [echoString]
