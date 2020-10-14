@@ -1,10 +1,11 @@
 # ARCLManager
 
 ## This is a C# dll to facilitate asycronous communications using the ARCL protocol.
-# This repo is required for compalation. [SocketManager](https://github.com/ZeroxCorbin/SocketManager)
-# Here are some example applications.
-[Queue Job Manager Demo](https://github.com/ZeroxCorbin/ARCLManager_QueueJobManager_Demo)
-[Configuration Manager Demo](https://github.com/ZeroxCorbin/ARCLManager_ConfigurationManager_Demo)
+# This repo is required for compalation;<br>
+[SocketManager](https://github.com/ZeroxCorbin/SocketManager)<br>
+# Here are some example applications.<br>
+[Queue Job Manager Demo](https://github.com/ZeroxCorbin/ARCLManager_QueueJobManager_Demo)<br>
+[Configuration Manager Demo](https://github.com/ZeroxCorbin/ARCLManager_ConfigurationManager_Demo)<br>
 
 
 ### Here is an example of using the ARCLConnection;
