@@ -4,15 +4,42 @@ using System.Linq;
 
 namespace ARCLTypes
 {
+    public enum ARCLJobStatusRequestTypes
+    {
+        Pending,
+        Interrupted,
+        InProgress,
+        Completed,
+        Cancelled,
+        Failed,
+    }
+
     public class QueueManagerJobSegment : EventArgs
     {
+        /// <summary>
+        /// The orignal message to be parsed.
+        /// </summary>
+        public string Message { get; }
+        /// <summary>
+        /// Is there an Exception from parsing the Message?
+        /// </summary>
+        public bool IsMessageExeption { get; }
+        /// <summary>
+        /// The Exception from parsing the Message.
+        /// Will be null if IsMessageException = false.
+        /// </summary>
+        public Exception Exception { get; } = null;
+        /// <summary>
+        /// Is this an EndOfCommand message?
+        /// </summary>
+        public bool IsEnd { get; } = false;
+
         public enum Types
         {
             pickup,
             dropoff
         }
 
-        public string Message { get; }
         public string ID { get; }
         public Types Type { get; }
         public int Order { get; }
@@ -25,7 +52,7 @@ namespace ARCLTypes
         public DateTime StartedOn { get; }
         public DateTime CompletedOn { get; }
         public int FailCount { get; }
-        public bool IsEnd { get; }
+
 
         public QueueManagerJobSegment(string jobID, string goalName, Types type, int priority = 10)
         {
@@ -50,21 +77,20 @@ namespace ARCLTypes
                 IsEnd = true;
                 return;
             }
-
             //QueueMulti: goal "Goal1" with priority 10 id PICKUP12 and job_id OWBQYSXSGZ successfully queued
-            if (spl[0].StartsWith("QueueMulti", StringComparison.CurrentCultureIgnoreCase))
+             else if (spl[0].StartsWith("QueueMulti", StringComparison.CurrentCultureIgnoreCase))
             {
                 try
                 {
                     if (spl.Length < 13)
-                        throw new Exception();
+                        throw new Exception($"Invalid QueueMulti message length.");
 
                     GoalName = spl[2].Replace("\"", "");
 
                     if (int.TryParse(spl[5], out int pri))
                         Priority = pri;
                     else
-                        throw new Exception();
+                        throw new Exception($"Could not parse \"{spl[5]}\" to: Integer");
 
                     ID = spl[7];
 
@@ -74,7 +100,7 @@ namespace ARCLTypes
                         if (int.TryParse(ID.Replace("PICKUP", ""), out int val))
                             Order = val;
                         else
-                            throw new Exception();
+                            throw new Exception($"Could not parse \"{ID.Replace("PICKUP", "")}\" to: Integer");
 
                     }
                     else if (ID.StartsWith("DROPOFF"))
@@ -83,7 +109,7 @@ namespace ARCLTypes
                         if (int.TryParse(ID.Replace("DROPOFF", ""), out int val))
                             Order = val;
                         else
-                            throw new Exception();
+                            throw new Exception($"Could not parse \"{ID.Replace("DROPOFF", "")}\" to: Integer");
                     }
                     else
                     {
@@ -93,23 +119,23 @@ namespace ARCLTypes
                     JobID = spl[10];
 
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
-
+                    Exception = ex;
+                    IsMessageExeption = true;
                 }
 
                 return;
             }
-
             //QueueShow: <id> <jobId> <priority> <status> <substatus> Goal <"goalName"> <”robotName”>
             //           <queued date> <queued time> <completed date> <completed time> <echoString> <failed count>
             //QueueShow: PICKUP3 JOB3 10 Completed None Goal "1" "21" 11/14/2012 11:49:23 11/14/2012 11:49:23 "" 0
-            if (spl[0].StartsWith("QueueShow", StringComparison.CurrentCultureIgnoreCase) | spl[0].StartsWith("QueueUpdate", StringComparison.CurrentCultureIgnoreCase))
+            else if (spl[0].StartsWith("QueueShow", StringComparison.CurrentCultureIgnoreCase) | spl[0].StartsWith("QueueUpdate", StringComparison.CurrentCultureIgnoreCase))
             {
                 try
                 {
                     if (spl.Length != 15)
-                        throw new Exception();
+                        throw new Exception($"Invalid QueueShow or QueueUpdate message length.");
 
                     ID = spl[1];
 
@@ -119,7 +145,7 @@ namespace ARCLTypes
                         if (int.TryParse(ID.Replace("PICKUP", ""), out int val))
                             Order = val;
                         else
-                            throw new Exception();
+                            throw new Exception($"Could not parse \"{ID.Replace("PICKUP", "")}\" to: Integer");
 
                     }
                     else if (ID.StartsWith("DROPOFF"))
@@ -128,7 +154,7 @@ namespace ARCLTypes
                         if (int.TryParse(ID.Replace("DROPOFF", ""), out int val))
                             Order = val;
                         else
-                            throw new Exception();
+                            throw new Exception($"Could not parse \"{ID.Replace("DROPOFF", "")}\" to: Integer");
                     }
                     else
                     {
@@ -140,19 +166,19 @@ namespace ARCLTypes
                     if (int.TryParse(spl[3], out int pri))
                         Priority = pri;
                     else
-                        throw new Exception();
+                        throw new Exception($"Could not parse \"{spl[3]}\" to: Integer");
 
                     if (Enum.TryParse(spl[4], out ARCLStatus status))
                         Status = status;
                     else
-                        throw new Exception();
+                        throw new Exception($"Could not parse \"{spl[4]}\" to: ARCLStatus");
 
                     if (!spl[5].StartsWith("ID_"))
                     {
                         if (Enum.TryParse(spl[5], out ARCLSubStatus subStatus))
                             SubStatus = subStatus;
                         else
-                            throw new Exception();
+                            throw new Exception($"Could not parse \"{spl[5]}\" to: ARCLSubStatus");
                     }
 
                     GoalName = spl[7].Replace("\"", "");
@@ -161,11 +187,11 @@ namespace ARCLTypes
 
                     if (!spl[9].Equals("None"))
                     {
-                        if (DateTime.TryParse(spl[9] + " " + spl[10], out DateTime dt))
+                        if (DateTime.TryParse($"{spl[9]} {spl[10]}", out DateTime dt))
                             StartedOn = dt;
                     }
                     else
-                        throw new Exception();
+                        throw new Exception($"Could not parse \"{spl[9]} {spl[10]}\" to: DateTime");
 
                     if (!spl[11].Equals("None"))
                     {
@@ -180,14 +206,20 @@ namespace ARCLTypes
                     if (int.TryParse(spl[i], out int fail))
                         FailCount = fail;
                     else
-                        throw new Exception();
+                        throw new Exception($"Could not parse \"{spl[i]}\" to: Integer");
 
                 }
-                catch (Exception)
+                catch (Exception ex)
                 {
-
+                    Exception = ex;
+                    IsMessageExeption = true;
                 }
                 return;
+            }
+            else
+            {
+                Exception = new Exception("The message does not match a know pattern.");
+                IsMessageExeption = true;
             }
         }
 

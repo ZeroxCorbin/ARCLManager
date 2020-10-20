@@ -6,6 +6,11 @@ using System.Threading;
 
 namespace ARCL
 {
+    /// <summary>
+    /// This class is used to manage the Range Devices of a Mobile robot.
+    /// When you call Start(), the Devices dictionary will be loaded with all of the available range devices.
+    /// Call WaitForSync() to wait for the Devices (dictionary) to be loaded.
+    /// </summary>
     public class RangeDeviceManager
     {
         /// <summary>
@@ -20,15 +25,16 @@ namespace ARCL
         /// </summary>
         public event SyncStateChangeEventHandler SyncStateChange;
         /// <summary>
-        /// The state of the dictionary.
+        /// The state of the Managers dictionary.
         /// State= WAIT; Wait to access the dictionary.
         ///              Calling Start() or Stop() sets this state.
         /// State= DELAYED; The dictionary Values are not valid.
-        ///                 This indicates the Values of the dictionary are being updated
-        ///                 or the Values from the ARCL Server are delayed.
+        ///                 The dictionary Values being updated from the ARCL Server are delayed.
+        /// State= UPDATING; The dictionary Values are being updated.
         /// State= OK; The dictionary is up to date.
         /// </summary>
         public SyncStateEventArgs SyncState { get; private set; } = new SyncStateEventArgs();
+        public bool IsSynced => SyncState.State == SyncStates.OK;
         /// <summary>
         /// A reference to the connection to the ARCL Server.
         /// </summary>
@@ -120,7 +126,7 @@ namespace ARCL
 
         private void Start_()
         {
-            Connection.RangeDevice += Connection_RangeDevice;
+            Connection.RangeDeviceUpdate += Connection_RangeDeviceUpdate;
 
             Devices.Clear();
 
@@ -133,7 +139,7 @@ namespace ARCL
         private void Stop_()
         {
             if(Connection != null)
-                Connection.RangeDevice -= Connection_RangeDevice;
+                Connection.RangeDeviceUpdate -= Connection_RangeDeviceUpdate;
 
             IsRunning = false;
             Thread.Sleep(UpdateRate + 100);
@@ -192,11 +198,11 @@ namespace ARCL
                 Connection.RangeDeviceCumulativeUpdate -= Connection_RangeDeviceCumulativeUpdate;
             }
         }
-        private void Connection_RangeDevice(object sender, RangeDeviceEventArgs device)
+        private void Connection_RangeDeviceUpdate(object sender, RangeDeviceEventArgs device)
         {
             if(device.IsEnd)
             {
-                Connection.RangeDevice -= Connection_RangeDevice;
+                Connection.RangeDeviceUpdate -= Connection_RangeDeviceUpdate;
                 ThreadPool.QueueUserWorkItem(new WaitCallback(RangeDeviceUpdate_Thread));
 
                 if(SyncState.State != SyncStates.OK)

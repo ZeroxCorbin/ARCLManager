@@ -9,8 +9,8 @@ namespace ARCL
 {
     /// <summary>
     /// This class is used to manage the configuration of a Mobile robot or Enterprise Manager.
-    /// When you call Start() the Sections list will be loaded with all of the available configuration sections.
-    /// Call WaitForSync() to wait for the configuration sections to be loaded.
+    /// When you call Start(), the Sections dictionary will be loaded with all of the available configuration sections.
+    /// Call WaitForSync() to wait for the Sections (dictionary) to be loaded.
     /// You must call ReadSectionValues(string sectionName) for each section to get it's values.
     /// You can serialize the Sections dictionary to and from a string to store the values.
     /// </summary>
@@ -28,15 +28,16 @@ namespace ARCL
         /// </summary>
         public event SyncStateChangeEventHandler SyncStateChange;
         /// <summary>
-        /// The state of the dictionary.
+        /// The state of the Managers dictionary.
         /// State= WAIT; Wait to access the dictionary.
         ///              Calling Start() or Stop() sets this state.
         /// State= DELAYED; The dictionary Values are not valid.
-        ///                 This indicates the Values of the dictionary are being updated
-        ///                 or the Values from the ARCL Server are delayed.
+        ///                 The dictionary Values being updated from the ARCL Server are delayed.
+        /// State= UPDATING; The dictionary Values are being updated.
         /// State= OK; The dictionary is up to date.
         /// </summary>
         public SyncStateEventArgs SyncState { get; private set; } = new SyncStateEventArgs();
+        public bool IsSynced => SyncState.State == SyncStates.OK;
         /// <summary>
         /// A reference to the connection to the ARCL Server.
         /// </summary>
@@ -101,7 +102,7 @@ namespace ARCL
         }
 
         public ConfigManager() { }
-        public ConfigManager(ARCLConnection connection) => Connection = connection
+        public ConfigManager(ARCLConnection connection) => Connection = connection;
         private void Start_()
         {
             Connection.ConfigSectionUpdate += Connection_ConfigSectionUpdate;
@@ -122,12 +123,30 @@ namespace ARCL
 
         private void Connection_ConfigSectionUpdate(object sender, ConfigSectionUpdateEventArgs data)
         {
+            if(data.IsChanged)
+            {
+                if(SectionChangeExpected)
+                {
+                    SectionChangeExpected = false;
+                    return;
+                }
+
+                if(SyncState.State != SyncStates.UPDATING)
+                {
+                    SyncState.State = SyncStates.UPDATING;
+                    SyncState.Message = "Configuration Changed";
+                    Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                }
+
+                return;
+            }
+
             if(data.IsEnd)
             {
                 if(SyncState.State != SyncStates.OK)
                 {
                     SyncState.State = SyncStates.OK;
-                    SyncState.Message = "EndGetConfigSectionList";
+                    SyncState.Message = "EndGetConfigSection";
                     Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
                 }
 
@@ -153,23 +172,19 @@ namespace ARCL
         /// 
         /// </summary>
         public ReadOnlyConcurrentDictionary<string, List<ConfigSection>> Sections { get; set; } = new ReadOnlyConcurrentDictionary<string, List<ConfigSection>>(10,100);
- 
+
         private string InProcessSectionName { get; set; } = null;
+        private bool SectionChangeExpected { get; set; } = false;
         public bool ReadSectionValues(string sectionName)
         {
-            SyncState.State = SyncStates.DELAYED;
+            SyncState.State = SyncStates.UPDATING;
             SyncState.Message = $"GetConfigSectionValues {sectionName}";
             Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
 
             if(Sections.ContainsKey(sectionName))
-            {
                 Sections[sectionName].Clear();
-            }
             else
-            {
-                 while(!Sections.TryAdd(sectionName, new List<ConfigSection>())) { Sections.Locked = false; }
-            }
-
+                while(!Sections.TryAdd(sectionName, new List<ConfigSection>())) { Sections.Locked = false; }
 
             Stopwatch sw = new Stopwatch();
 
@@ -180,6 +195,18 @@ namespace ARCL
 
             return Connection.Write($"getconfigsectionvalues {sectionName}");
         }
+        public bool ReadAllSectionsValues()
+        {
+            bool @ret = false;
+            foreach(var kv in Sections)
+                if(!ReadSectionValues(kv.Key))
+                {
+                    @ret = true;
+                    break;
+                }
+            return @ret;
+        }
+            
         public void WriteSectionValues(string sectionName)
         {
             if(!Sections.ContainsKey(sectionName)) return;
@@ -202,6 +229,7 @@ namespace ARCL
                 }
             }
             Connection.Write($"configParse");
+            SectionChangeExpected = true;
         }
 
         public string SectionValuesToText(string sectionName)

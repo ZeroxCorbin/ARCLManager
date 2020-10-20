@@ -22,15 +22,16 @@ namespace ARCL
         /// </summary>
         public event SyncStateChangeEventHandler SyncStateChange;
         /// <summary>
-        /// The state of the dictionary.
+        /// The state of the Managers dictionary.
         /// State= WAIT; Wait to access the dictionary.
         ///              Calling Start() or Stop() sets this state.
         /// State= DELAYED; The dictionary Values are not valid.
-        ///                 This indicates the Values of the dictionary are being updated
-        ///                 or the Values from the ARCL Server are delayed.
+        ///                 The dictionary Values being updated from the ARCL Server are delayed.
+        /// State= UPDATING; The dictionary Values are being updated.
         /// State= OK; The dictionary is up to date.
         /// </summary>
         public SyncStateEventArgs SyncState { get; private set; } = new SyncStateEventArgs();
+        public bool IsSynced => SyncState.State == SyncStates.OK;
         /// <summary>
         /// A reference to the connection to the ARCL Server.
         /// </summary>

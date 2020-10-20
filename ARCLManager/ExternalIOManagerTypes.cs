@@ -5,6 +5,17 @@ using System.Text;
 
 namespace ARCLTypes
 {
+    public class ExtIOUpdateParseException : Exception
+    {
+        public ExtIOUpdateParseException()
+        {
+        }
+
+        public ExtIOUpdateParseException(string message)
+            : base(message)
+        {
+        }
+    }
     public class ExtIOSet
     {
         public string Name { get; private set; }
