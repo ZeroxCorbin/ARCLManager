@@ -1,14 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.ComponentModel.Design;
-using System.Diagnostics;
 using System.Linq;
 using System.Net;
-using System.Net.Sockets;
-using System.Text;
-using System.Text.RegularExpressions;
-using System.Threading;
-using System.Threading.Tasks;
 using ARCLTypes;
 using SocketManagerNS;
 
@@ -61,7 +53,7 @@ namespace ARCL
         public event RangeDeviceCumulativeUpdateEventHandler RangeDeviceCumulativeUpdate;
 
         public delegate void RangeDeviceEventHandler(object sender, RangeDeviceEventArgs device);
-        public event RangeDeviceEventHandler RangeDevice;
+        public event RangeDeviceEventHandler RangeDeviceUpdate;
 
         /// <summary>
         /// A message that starts with "ExtIO" or "EndExtIO".
@@ -117,6 +109,9 @@ namespace ARCL
 
         public new bool StartReceiveAsync(char messageTerminator = '\n')
         {
+            if(IsReceivingAsync)
+                return true;
+
             base.DataReceived += Connection_DataReceived;
 
             return base.StartReceiveAsync(messageTerminator);
@@ -175,6 +170,22 @@ namespace ARCL
             else return false;
         }
 
+        public static string GenerateConnectionString(string ip, int port, string password) => $"{ip}:{port}:{password}";
+        public static string GenerateConnectionString(IPAddress ip, int port, string password) => $"{ip}:{port}:{password}";
+        public static new bool ValidateConnectionString(string connectionString)
+        {
+            if(connectionString.Count(c => c == ':') < 2) return false;
+            string[] spl = connectionString.Split(':');
+
+            if(!IPAddress.TryParse(spl[0], out IPAddress ip)) return false;
+
+            if(!int.TryParse(spl[1], out int port)) return false;
+
+            if(string.IsNullOrWhiteSpace(spl[2])) return false;
+
+            return true;
+        }
+
         //Private
         private void Connection_DataReceived(object sender, string data)
         {
@@ -208,7 +219,7 @@ namespace ARCL
                     continue;
                 }
 
-                if (message.StartsWith("GetConfigSection", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndOfGetConfigSection", StringComparison.CurrentCultureIgnoreCase))
+                if (message.StartsWith("GetConfigSection", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndOfGetConfigSection", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("Configuration changed", StringComparison.CurrentCultureIgnoreCase))
                 {
                     this.QueueTask("GetConfigSection", false, new Action(() => ConfigSectionUpdate?.Invoke(this, new ConfigSectionUpdateEventArgs(message))));
                     continue;
@@ -234,7 +245,7 @@ namespace ARCL
 
                 if (message.StartsWith("RangeDevice", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndOfRangeDeviceList", StringComparison.CurrentCultureIgnoreCase))
                 {
-                    this.QueueTask("RangeDevice", false, new Action(() => RangeDevice?.Invoke(this, new RangeDeviceEventArgs(message))));
+                    this.QueueTask("RangeDevice", false, new Action(() => RangeDeviceUpdate?.Invoke(this, new RangeDeviceEventArgs(message))));
                     continue;
                 }
             }

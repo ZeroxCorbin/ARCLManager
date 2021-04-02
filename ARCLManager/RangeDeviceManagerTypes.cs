@@ -59,7 +59,10 @@ namespace ARCLTypes
         public RangeDeviceDrawingData CurrentReadingsDrawingData { get; }
         public RangeDeviceDrawingData CumulativeReadingsDrawingData { get; }
 
+        
+        public bool CurrentReadingsInSync { get; set; }
         public RangeDeviceReadingUpdateEventArgs CurrentReadings { get; set; }
+        public bool CumulativeReadingsInSync { get; set; }
         public RangeDeviceReadingUpdateEventArgs CumulativeReadings { get; set; }
 
         public RangeDevice(string message)

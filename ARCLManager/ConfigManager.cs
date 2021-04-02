@@ -1,72 +1,257 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Text;
+using System.Threading;
 using ARCLTypes;
 
 namespace ARCL
 {
+    /// <summary>
+    /// This class is used to manage the configuration of a Mobile robot or Enterprise Manager.
+    /// When you call Start(), the Sections dictionary will be loaded with all of the available configuration sections.
+    /// Call WaitForSync() to wait for the Sections (dictionary) to be loaded.
+    /// You must call ReadSectionValues(string sectionName) for each section to get it's values.
+    /// You can serialize the Sections dictionary to and from a string to store the values.
+    /// </summary>
     public class ConfigManager
     {
-        //Public
         /// <summary>
-        /// Raised when the config Section is sycronized with the EM.
+        /// The Delegate for the SyncStateChange Event.
         /// </summary>
-        public delegate void InSyncEventHandler(object sender, string sectionName);
-        public event InSyncEventHandler InSync;
+        /// <param name="sender">A reference to this class.</param>
+        /// <param name="syncState">The state of the dictionary Keys. See the SyncState property for details.</param>
+        public delegate void SyncStateChangeEventHandler(object sender, SyncStateEventArgs syncState);
         /// <summary>
-        /// True when the config Section is sycronized with the EM.
+        /// Raised when SyncState property changes.
+        /// See the SyncState property for details.
         /// </summary>
-        public bool IsSynced { get; private set; } = false;
-
+        public event SyncStateChangeEventHandler SyncStateChange;
+        /// <summary>
+        /// The state of the Managers dictionary.
+        /// State= WAIT; Wait to access the dictionary.
+        ///              Calling Start() or Stop() sets this state.
+        /// State= DELAYED; The dictionary Values are not valid.
+        ///                 The dictionary Values being updated from the ARCL Server are delayed.
+        /// State= UPDATING; The dictionary Values are being updated.
+        /// State= OK; The dictionary is up to date.
+        /// </summary>
+        public SyncStateEventArgs SyncState { get; private set; } = new SyncStateEventArgs();
+        public bool IsSynced => SyncState.State == SyncStates.OK;
+        /// <summary>
+        /// A reference to the connection to the ARCL Server.
+        /// </summary>
         private ARCLConnection Connection { get; set; }
-
-        public Dictionary<string, List<ConfigSection>> Sections { get; set; } = new Dictionary<string, List<ConfigSection>>();
-
-        public ConfigManager() { }
-        public ConfigManager(ARCLConnection connection) => Connection = connection;
+        /// <summary>
+        /// Start the manager.
+        /// This will load the dictionary.
+        /// </summary>
+        /// <returns>False: Connection issue.</returns>
         public bool Start()
         {
-            if (Connection == null) return false;
-
-            if(!Connection.IsConnected) return false;
-
-            if (Connection.StartReceiveAsync())
-            {
-                Connection.ConfigSectionUpdate += Connection_ConfigSectionUpdate;
-                return true;
-            }
-            else
+            if(Connection == null || !Connection.IsConnected)
                 return false;
-           
+            if(!Connection.StartReceiveAsync())
+                return false;
+
+            Start_();
+
+            return true;
         }
+        /// <summary>
+        /// Start the manager.
+        /// This will load the dictionary.
+        /// </summary>
+        /// <param name="connection">A connected ARCLConnection.</param>
+        /// <returns>False: Connection issue.</returns>
         public bool Start(ARCLConnection connection)
         {
             Connection = connection;
             return Start();
         }
+        /// <summary>
+        /// Stop the manager.
+        /// </summary>
         public void Stop()
         {
-            if (Connection == null) return;
+            if(SyncState.State != SyncStates.WAIT)
+            {
+                SyncState.State = SyncStates.WAIT;
+                SyncState.Message = "Stop";
+                Connection?.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+            }
+            Connection?.StopReceiveAsync();
 
-            Connection.ConfigSectionUpdate -= Connection_ConfigSectionUpdate;
+            Stop_();
+        }
+        /// <summary>
+        /// Wait for the dictionary to be in sync with the ARCL server data.
+        /// After calling Start(), you can either call this method or wait for the SyncStateChanged event. 
+        /// </summary>
+        /// <param name="timeout">Wait for SyncState.State.OK for milliseconds.</param>
+        /// <returns>False: Timeout waiting for SyncState.State.OK.</returns>
+        public bool WaitForSync(long timeout = 30000)
+        {
+            Stopwatch sw = new Stopwatch();
+            sw.Restart();
 
-            Connection.StopReceiveAsync();
+            while(SyncState.State != SyncStates.OK && sw.ElapsedMilliseconds < timeout)
+            { Thread.Sleep(10); }
+
+            return SyncState.State == SyncStates.OK;
         }
 
+        public ConfigManager() { }
+        public ConfigManager(ARCLConnection connection) => Connection = connection;
+        private void Start_()
+        {
+            Connection.ConfigSectionUpdate += Connection_ConfigSectionUpdate;
+
+            Sections.Clear();
+
+            SyncState.State = SyncStates.WAIT;
+            SyncState.Message = "GetConfigSectionList";
+            Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+
+            Connection.Write($"getconfigsectionlist");
+        }
+        private void Stop_()
+        {
+            if(Connection != null)
+                Connection.ConfigSectionUpdate -= Connection_ConfigSectionUpdate;
+        }
+
+        private void Connection_ConfigSectionUpdate(object sender, ConfigSectionUpdateEventArgs data)
+        {
+            if(data.IsChanged)
+            {
+                if(SectionChangeExpected)
+                {
+                    SectionChangeExpected = false;
+                    return;
+                }
+
+                if(SyncState.State != SyncStates.UPDATING)
+                {
+                    SyncState.State = SyncStates.UPDATING;
+                    SyncState.Message = "Configuration Changed";
+                    Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                }
+
+                return;
+            }
+
+            if(data.IsEnd)
+            {
+                if(SyncState.State != SyncStates.OK)
+                {
+                    InProcessSectionName = null;
+
+                    SyncState.State = SyncStates.OK;
+                    SyncState.Message = "EndGetConfigSection";
+                    Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                }
+
+
+                return;
+            }
+
+            if(data.IsSectionName)
+            {
+                if(Sections.ContainsKey(data.SectionName))
+                    return;
+
+                while(!Sections.TryAdd(data.SectionName, new List<ConfigSection>())) { Sections.Locked = false; }
+
+                return;
+            }
+            if(InProcessSectionName == null)
+                return;
+
+            Sections[InProcessSectionName].Add(data.Section);
+        }
+
+        /// <summary>
+        /// 
+        /// </summary>
+        public ReadOnlyConcurrentDictionary<string, List<ConfigSection>> Sections { get; set; } = new ReadOnlyConcurrentDictionary<string, List<ConfigSection>>(10, 100);
+        private object __InProcessLock { get; } = new object();
+
         private string InProcessSectionName { get; set; } = null;
+        private bool SectionChangeExpected { get; set; } = false;
+
+        public bool ReadSectionValues(string sectionName)
+        {
+            lock(__InProcessLock)
+            {
+                InProcessSectionName = sectionName;
+
+                SyncState.State = SyncStates.UPDATING;
+                SyncState.Message = $"GetConfigSectionValues {sectionName}";
+                Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+
+                if(Sections.ContainsKey(sectionName))
+                    Sections[sectionName].Clear();
+                else
+                    while(!Sections.TryAdd(sectionName, new List<ConfigSection>())) { Sections.Locked = false; }
+
+                Connection.Write($"getconfigsectionvalues {sectionName}");
+
+                while(InProcessSectionName != null)
+                    Thread.Sleep(1);
+
+                return true;
+            }
+        }
+        public bool ReadAllSectionsValues()
+        {
+            bool @ret = false;
+            foreach(var kv in Sections)
+                if(!ReadSectionValues(kv.Key))
+                {
+                    @ret = true;
+                    break;
+                }
+            return @ret;
+        }
+
+        public void WriteSectionValues(string sectionName)
+        {
+            if(!Sections.ContainsKey(sectionName)) return;
+
+            WaitForSync();
+
+            Connection.Write($"configStart");
+            Connection.Write($"configAdd Section {sectionName}");
+
+            foreach(ConfigSection cs in Sections[sectionName])
+            {
+                if(!string.IsNullOrEmpty(cs.Value))
+                {
+                    if(cs.IsBeginList || cs.IsEndList)
+                        Connection.Write($"configAdd {cs.Value} {cs.Name}");
+                    else
+                        Connection.Write($"configAdd {cs.Name} {cs.Value}");
+                }
+                else
+                {
+                    Connection.Write($"configAdd {cs.Name}");
+                }
+            }
+            Connection.Write($"configParse");
+            SectionChangeExpected = true;
+        }
 
         public string SectionValuesToText(string sectionName)
         {
-            if (!Sections.ContainsKey(sectionName)) return string.Empty;
+            if(!Sections.ContainsKey(sectionName)) return string.Empty;
 
             StringBuilder sb = new StringBuilder();
 
             sb.Append($"Section::{sectionName}\r\n");
-            foreach (ConfigSection cs in Sections[sectionName])
+            foreach(ConfigSection cs in Sections[sectionName])
             {
-                if (!string.IsNullOrEmpty(cs.Value))
+                if(!string.IsNullOrEmpty(cs.Value))
                     sb.Append($"{cs.Name} {cs.Value}\r\n");
                 else
                     sb.Append($"{cs.Name}\r\n");
@@ -78,21 +263,21 @@ namespace ARCL
         {
             string[] spl = sectionText.Split('\r', '\n');
 
-            if (spl.Length < 2) return false;
+            if(spl.Length < 2) return false;
 
             string section = "";
             foreach(string value in spl)
             {
-                if (string.IsNullOrEmpty(value)) continue;
+                if(string.IsNullOrEmpty(value)) continue;
 
-                if (value.StartsWith($"Section::"))
+                if(value.StartsWith($"Section::"))
                 {
                     section = value.Replace("Section::", "");
 
-                    if (Sections.ContainsKey(section)) 
+                    if(Sections.ContainsKey(section))
                         Sections[section].Clear();
                     else
-                        Sections.Add(section, new List<ConfigSection>());
+                        while(!Sections.TryAdd(section, new List<ConfigSection>())) { Sections.Locked = false; }
 
                     continue;
                 }
@@ -101,80 +286,6 @@ namespace ARCL
             }
 
             return true;
-        }
-
-        public bool ReadSectionsList()
-        {
-            IsSynced = false;
-
-            return Connection.Write($"getconfigsectionlist\r\n");
-        }
-        public bool ReadSectionValues(string sectionName)
-        {
-            IsSynced = false;
-
-            if (Sections.ContainsKey(sectionName))
-            {
-                Sections[sectionName].Clear();
-                Sections.Remove(sectionName);
-            }
-            Sections.Add(sectionName, new List<ConfigSection>());
-
-            Stopwatch sw = new Stopwatch();
-
-            while (InProcessSectionName != null && sw.ElapsedMilliseconds < 1000) { }
-            if (InProcessSectionName != null)
-                return false;
-            InProcessSectionName = sectionName;
-
-            return Connection.Write($"getconfigsectionvalues {sectionName}\r\n");
-        }
-
-        public void WriteConfigSection(string sectionName)
-        {
-            if (!Sections.ContainsKey(sectionName)) return;
-
-            Connection.Write($"configStart\r\n");
-            Connection.Write($"configAdd Section {sectionName}\r\n");
-
-            foreach (ConfigSection cs in Sections[sectionName])
-            {
-                if (!string.IsNullOrEmpty(cs.Value))
-                {
-                    if (cs.IsBeginList || cs.IsEndList)
-                        Connection.Write($"configAdd {cs.Value} {cs.Name}\r\n");
-                    else
-                        Connection.Write($"configAdd {cs.Name} {cs.Value}\r\n");
-                }
-                else
-                {
-                    Connection.Write($"configAdd {cs.Name}\r\n");
-                }
-            }
-            Connection.Write($"configParse\r\n");
-        }
-
-        private void Connection_ConfigSectionUpdate(object sender, ConfigSectionUpdateEventArgs data)
-        {
-            if (data.IsEnd)
-            {
-                IsSynced = true;
-                Connection.QueueTask(false, new Action(() => InSync?.Invoke(this, InProcessSectionName)));
-                InProcessSectionName = null;
-                return;
-            }
-
-            if (data.IsSectionName)
-            {
-                if (Sections.ContainsKey(data.SectionName)) return;
-
-                Sections.Add(data.SectionName, new List<ConfigSection>());
-
-                return;
-            }
-            if (InProcessSectionName == null) return;
-
-            Sections[InProcessSectionName].Add(data.Section);
         }
     }
 }

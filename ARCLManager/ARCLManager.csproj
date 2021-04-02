@@ -1,8 +1,9 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFrameworks>netstandard2.1;net472</TargetFrameworks>
-    <Configurations>Debug;Release;ARCLManager_ConfigurationManager_Demo</Configurations>
+    <Configurations>Debug;Release;MobileConfiguration</Configurations>
+    <LangVersion>8.0</LangVersion>
   </PropertyGroup>
 
   <ItemGroup>

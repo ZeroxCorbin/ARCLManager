@@ -29,11 +29,17 @@ namespace ARCLTypes
         public string Message { get; private set; }
         public ConfigSection Section { get; private set; }
         public bool IsEnd { get; private set; }
+        public bool IsChanged { get; private set; }
         public bool IsSectionName { get; private set; }
         public string SectionName { get; private set; }
         public ConfigSectionUpdateEventArgs(string msg)
         {
             Message = msg;
+            if (msg.StartsWith("Configuration changed", StringComparison.CurrentCultureIgnoreCase))
+            {
+                IsChanged = true;
+                return;
+            }
 
             if (msg.StartsWith("endof", StringComparison.CurrentCultureIgnoreCase))
             {

@@ -1,97 +1,259 @@
 ﻿using ARCLTypes;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
+using System.Threading;
 
 namespace ARCL
 {
+    /// <summary>
+    /// This class is used to manage the Range Devices of a Mobile robot.
+    /// When you call Start(), the Devices dictionary will be loaded with all of the available range devices.
+    /// Call WaitForSync() to wait for the Devices (dictionary) to be loaded.
+    /// </summary>
     public class RangeDeviceManager
     {
         /// <summary>
-        /// Raised when the External IO is sycronized with the EM.
+        /// The Delegate for the SyncStateChange Event.
         /// </summary>
-        public delegate void InSyncEventHandler(object sender, bool state);
-        public event InSyncEventHandler InSync;
+        /// <param name="sender">A reference to this class.</param>
+        /// <param name="syncState">The state of the dictionary Keys. See the SyncState property for details.</param>
+        public delegate void SyncStateChangeEventHandler(object sender, SyncStateEventArgs syncState);
         /// <summary>
-        /// True when the External IO is sycronized with the EM.
+        /// Raised when SyncState property changes.
+        /// See the SyncState property for details.
         /// </summary>
-        public bool IsSynced { get; private set; } = false;
-
+        public event SyncStateChangeEventHandler SyncStateChange;
+        /// <summary>
+        /// The state of the Managers dictionary.
+        /// State= WAIT; Wait to access the dictionary.
+        ///              Calling Start() or Stop() sets this state.
+        /// State= DELAYED; The dictionary Values are not valid.
+        ///                 The dictionary Values being updated from the ARCL Server are delayed.
+        /// State= UPDATING; The dictionary Values are being updated.
+        /// State= OK; The dictionary is up to date.
+        /// </summary>
+        public SyncStateEventArgs SyncState { get; private set; } = new SyncStateEventArgs();
+        public bool IsSynced => SyncState.State == SyncStates.OK;
+        /// <summary>
+        /// A reference to the connection to the ARCL Server.
+        /// </summary>
         private ARCLConnection Connection { get; set; }
-        public StatusManager Status { get; private set; }
-        public RangeDeviceManager(ARCLConnection connection, StatusManager status)
+        /// <summary>
+        /// Start the manager.
+        /// This will load the dictionary.
+        /// </summary>
+        /// <param name="updateRate">How often to send a request to update the dictionary's Values.</param>
+        /// <returns>False: Connection issue.</returns>
+        public bool Start(int updateRate)
         {
-            Connection = connection;
-            Status = status;
-        }
+            UpdateRate = updateRate;
 
-        public ReadOnlyConcurrentDictionary<string, RangeDevice> Devices { get; private set; } = new ReadOnlyConcurrentDictionary<string, RangeDevice>(10, 100);
-        public List<string> DeviceNames
-        {
-            get
-            {
-                string[] strs = new string[Devices.Keys.Count];
-                Devices.Keys.CopyTo(strs, 0);
-                return new List<string>(strs);
-            }
-        }
-
-        public bool Start()
-        {
-            if (!Connection.IsConnected)
+            if(Connection == null || !Connection.IsConnected)
+                return false;
+            if(!Connection.StartReceiveAsync())
                 return false;
 
-            Connection.RangeDevice += Connection_RangeDevice;
+            Start_();
 
-            return RangeDeviceList();
+            return true;
         }
+        /// <summary>
+        /// Start the manager.
+        /// This will load the dictionary.
+        /// </summary>
+        /// <param name="updateRate">How often to send a request to update the dictionary's Values.</param>
+        /// <param name="connection">A connected ARCLConnection.</param>
+        /// <returns>False: Connection issue.</returns>
+        public bool Start(int updateRate, ARCLConnection connection)
+        {
+            UpdateRate = updateRate;
+            Connection = connection;
 
+            return Start(updateRate);
+        }
+        /// <summary>
+        /// Stop the manager.
+        /// </summary>
         public void Stop()
         {
-            if (IsSynced)
+            if(SyncState.State != SyncStates.WAIT)
             {
-                IsSynced = false;
-                Connection.QueueTask(false, new Action(() => InSync?.Invoke(this, IsSynced)));
+                SyncState.State = SyncStates.WAIT;
+                SyncState.Message = "Stop";
+                Connection?.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
             }
-
-            Connection.RangeDeviceCurrentUpdate -= Connection_RangeDeviceCurrentUpdate;
-            Connection.RangeDeviceCumulativeUpdate -= Connection_RangeDeviceCumulativeUpdate;
-            Connection.RangeDevice -= Connection_RangeDevice;
-
             Connection?.StopReceiveAsync();
 
+            Stop_();
+        }
+        /// <summary>
+        /// Wait for the dictionary to be in sync with the ARCL server data.
+        /// After calling Start(), you can either call this method or wait for the SyncStateChanged event. 
+        /// </summary>
+        /// <param name="timeout">Wait for SyncState.State.OK for milliseconds.</param>
+        /// <returns>False: Timeout waiting for SyncState.State.OK.</returns>
+        public bool WaitForSync(long timeout = 30000)
+        {
+            Stopwatch sw = new Stopwatch();
+            sw.Restart();
+
+            while(SyncState.State != SyncStates.OK & sw.ElapsedMilliseconds < timeout) { Thread.Sleep(1); }
+
+            return SyncState.State == SyncStates.OK;
+        }
+        /// <summary>
+        /// Is the update thread running?
+        /// </summary>
+        public bool IsRunning { get; private set; } = false;
+        /// <summary>
+        /// Time between updates of the dictionary Values.
+        /// If this is consistently greater than the UpdateRate passed to Start(), consider lowering the update rate.
+        /// </summary>
+        public long TTL { get; private set; } = 0;
+        /// <summary>
+        /// Stores the provided update rate for the Update_Thread. (ms)
+        /// </summary>
+        private int UpdateRate { get; set; } = 500;
+        /// <summary>
+        /// Used to time the message response. (TTL)
+        /// </summary>
+        private Stopwatch Stopwatch { get; } = new Stopwatch();
+        /// <summary>
+        /// Used to track if a message response was received before sending the next request.
+        /// </summary>
+        private bool Heartbeat { get; set; } = false;
+
+        private void Start_()
+        {
+            Connection.RangeDeviceUpdate += Connection_RangeDeviceUpdate;
+
             Devices.Clear();
+
+            Connection.Write("rangeDeviceList");
+
+            SyncState.State = SyncStates.WAIT;
+            SyncState.Message = "RangeDeviceList";
+            Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+        }
+        private void Stop_()
+        {
+            if(Connection != null)
+                Connection.RangeDeviceUpdate -= Connection_RangeDeviceUpdate;
+
+            IsRunning = false;
+            Thread.Sleep(UpdateRate + 100);
         }
 
-        private void Connection_RangeDevice(object sender, RangeDeviceEventArgs device)
+        public RangeDeviceManager() { }
+        public RangeDeviceManager(ARCLConnection connection) => Connection = connection;
+
+        private void RangeDeviceUpdate_Thread(object sender)
         {
-            if (device.IsEnd)
+            IsRunning = true;
+            Stopwatch.Reset();
+
+            Connection.RangeDeviceCurrentUpdate += Connection_RangeDeviceCurrentUpdate;
+            Connection.RangeDeviceCumulativeUpdate += Connection_RangeDeviceCumulativeUpdate;
+
+            try
             {
-                Connection.RangeDevice -= Connection_RangeDevice;
+                while(IsRunning)
+                {
+                    if(SyncState.State == SyncStates.OK)
+                        Stopwatch.Reset();
 
-                Connection.RangeDeviceCurrentUpdate += Connection_RangeDeviceCurrentUpdate;
-                Connection.RangeDeviceCumulativeUpdate += Connection_RangeDeviceCumulativeUpdate;
+                    foreach(KeyValuePair<string, RangeDevice> l in Devices)
+                        Connection.Write("rangeDeviceGetCurrent " + l.Key);
 
-                IsSynced = true;
-                Connection.QueueTask(false, new Action(() => InSync?.Invoke(this, IsSynced)));
+                    foreach(KeyValuePair<string, RangeDevice> l in Devices)
+                        Connection.Write("rangeDeviceGetCumulative " + l.Key);
+
+                    Heartbeat = false;
+
+                    Thread.Sleep(UpdateRate);
+
+                    if(Heartbeat)
+                    {
+                        if(SyncState.State != SyncStates.OK)
+                        {
+                            SyncState.State = SyncStates.OK;
+                            Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                        }
+                    }
+                    else
+                    {
+                        if(SyncState.State != SyncStates.DELAYED)
+                        {
+                            SyncState.State = SyncStates.DELAYED;
+                            Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                        }
+                    }
+                }
+            }
+            finally
+            {
+                IsRunning = false;
+                Connection.RangeDeviceCurrentUpdate -= Connection_RangeDeviceCurrentUpdate;
+                Connection.RangeDeviceCumulativeUpdate -= Connection_RangeDeviceCumulativeUpdate;
+            }
+        }
+        private void Connection_RangeDeviceUpdate(object sender, RangeDeviceEventArgs device)
+        {
+            if(device.IsEnd)
+            {
+                Connection.RangeDeviceUpdate -= Connection_RangeDeviceUpdate;
+                ThreadPool.QueueUserWorkItem(new WaitCallback(RangeDeviceUpdate_Thread));
+
+                if(SyncState.State != SyncStates.OK)
+                {
+                    SyncState.State = SyncStates.OK;
+                    SyncState.Message = "EndRangeDeviceList";
+                    Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                }
                 return;
             }
-            if (!string.IsNullOrEmpty(device.RangeDevice.Name))
-                while (!Devices.TryAdd(device.RangeDevice.Name, device.RangeDevice)) { Devices.Locked = false; }
+            if(!string.IsNullOrEmpty(device.RangeDevice.Name))
+                while(!Devices.TryAdd(device.RangeDevice.Name, device.RangeDevice)) { Devices.Locked = false; }
         }
 
-        private bool RangeDeviceList() => Connection.Write("rangeDeviceList");
 
+        public ReadOnlyConcurrentDictionary<string, RangeDevice> Devices { get; private set; } = new ReadOnlyConcurrentDictionary<string, RangeDevice>(10, 100);
 
-        private void Connection_RangeDeviceCurrentUpdate(object sender, ARCLTypes.RangeDeviceReadingUpdateEventArgs data)
+        public delegate void RangeDeviceCurrentReceivedEventHandler(RangeDeviceReadingUpdateEventArgs data);
+        public event RangeDeviceCurrentReceivedEventHandler RangeDeviceCurrentUpdate;
+
+        public delegate void RangeDeviceCumulativeUpdateEventHandler(RangeDeviceReadingUpdateEventArgs data);
+        public event RangeDeviceCumulativeUpdateEventHandler RangeDeviceCumulativeUpdate;
+
+        private void Connection_RangeDeviceCurrentUpdate(object sender, RangeDeviceReadingUpdateEventArgs data)
         {
-            if (Devices.ContainsKey(data.Name))
+            if(Devices.ContainsKey(data.Name))
+            {
                 Devices[data.Name].CumulativeReadings = data;
+                Devices[data.Name].CumulativeReadingsInSync = true;
+            }
+
+            Heartbeat = true;
+            TTL = Stopwatch.ElapsedMilliseconds;
+
+            Connection.QueueTask(true, new Action(() => RangeDeviceCurrentUpdate?.Invoke(data)));
+        }
+        private void Connection_RangeDeviceCumulativeUpdate(object sender, RangeDeviceReadingUpdateEventArgs data)
+        {
+            if(Devices.ContainsKey(data.Name))
+            {
+                Devices[data.Name].CurrentReadings = data;
+                Devices[data.Name].CurrentReadingsInSync = true;
+            }
+
+            Heartbeat = true;
+            TTL = Stopwatch.ElapsedMilliseconds;
+
+            Connection.QueueTask(true, new Action(() => RangeDeviceCumulativeUpdate?.Invoke(data)));
         }
 
-        private void Connection_RangeDeviceCumulativeUpdate(object sender, ARCLTypes.RangeDeviceReadingUpdateEventArgs data)
-        {
-            if (Devices.ContainsKey(data.Name))
-                Devices[data.Name].CurrentReadings = data;
-        }
+
+
     }
 }

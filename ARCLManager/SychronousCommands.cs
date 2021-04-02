@@ -47,9 +47,8 @@ namespace ARCL
             List<string> goals = new List<string>();
 
             this.Write("getgoals");
-            System.Threading.Thread.Sleep(500);
+            string goalsString = this.Read("End of goals");
 
-            string goalsString = this.Read("");
             string[] rawGoals = goalsString.Split('\r');
 
             foreach (string s in rawGoals)
