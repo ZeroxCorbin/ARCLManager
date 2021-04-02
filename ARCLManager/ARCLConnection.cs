@@ -109,6 +109,9 @@ namespace ARCL
 
         public new bool StartReceiveAsync(char messageTerminator = '\n')
         {
+            if(IsReceivingAsync)
+                return true;
+
             base.DataReceived += Connection_DataReceived;
 
             return base.StartReceiveAsync(messageTerminator);

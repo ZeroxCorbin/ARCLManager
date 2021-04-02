@@ -95,7 +95,7 @@ namespace ARCL
             Stopwatch sw = new Stopwatch();
             sw.Restart();
 
-            while(SyncState.State != SyncStates.OK & sw.ElapsedMilliseconds < timeout)
+            while(SyncState.State != SyncStates.OK && sw.ElapsedMilliseconds < timeout)
             { Thread.Sleep(10); }
 
             return SyncState.State == SyncStates.OK;
@@ -109,11 +109,11 @@ namespace ARCL
 
             Sections.Clear();
 
-            Connection.Write($"getconfigsectionlist");
-
             SyncState.State = SyncStates.WAIT;
             SyncState.Message = "GetConfigSectionList";
             Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+
+            Connection.Write($"getconfigsectionlist");
         }
         private void Stop_()
         {
@@ -145,12 +145,14 @@ namespace ARCL
             {
                 if(SyncState.State != SyncStates.OK)
                 {
+                    InProcessSectionName = null;
+
                     SyncState.State = SyncStates.OK;
                     SyncState.Message = "EndGetConfigSection";
                     Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
                 }
 
-                InProcessSectionName = null;
+
                 return;
             }
 
@@ -163,7 +165,8 @@ namespace ARCL
 
                 return;
             }
-            if(InProcessSectionName == null) return;
+            if(InProcessSectionName == null)
+                return;
 
             Sections[InProcessSectionName].Add(data.Section);
         }
@@ -171,29 +174,34 @@ namespace ARCL
         /// <summary>
         /// 
         /// </summary>
-        public ReadOnlyConcurrentDictionary<string, List<ConfigSection>> Sections { get; set; } = new ReadOnlyConcurrentDictionary<string, List<ConfigSection>>(10,100);
+        public ReadOnlyConcurrentDictionary<string, List<ConfigSection>> Sections { get; set; } = new ReadOnlyConcurrentDictionary<string, List<ConfigSection>>(10, 100);
+        private object __InProcessLock { get; } = new object();
 
         private string InProcessSectionName { get; set; } = null;
         private bool SectionChangeExpected { get; set; } = false;
+
         public bool ReadSectionValues(string sectionName)
         {
-            SyncState.State = SyncStates.UPDATING;
-            SyncState.Message = $"GetConfigSectionValues {sectionName}";
-            Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+            lock(__InProcessLock)
+            {
+                InProcessSectionName = sectionName;
 
-            if(Sections.ContainsKey(sectionName))
-                Sections[sectionName].Clear();
-            else
-                while(!Sections.TryAdd(sectionName, new List<ConfigSection>())) { Sections.Locked = false; }
+                SyncState.State = SyncStates.UPDATING;
+                SyncState.Message = $"GetConfigSectionValues {sectionName}";
+                Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
 
-            Stopwatch sw = new Stopwatch();
+                if(Sections.ContainsKey(sectionName))
+                    Sections[sectionName].Clear();
+                else
+                    while(!Sections.TryAdd(sectionName, new List<ConfigSection>())) { Sections.Locked = false; }
 
-            while(InProcessSectionName != null && sw.ElapsedMilliseconds < 1000) { }
-            if(InProcessSectionName != null)
-                return false;
-            InProcessSectionName = sectionName;
+                Connection.Write($"getconfigsectionvalues {sectionName}");
 
-            return Connection.Write($"getconfigsectionvalues {sectionName}");
+                while(InProcessSectionName != null)
+                    Thread.Sleep(1);
+
+                return true;
+            }
         }
         public bool ReadAllSectionsValues()
         {
@@ -206,10 +214,12 @@ namespace ARCL
                 }
             return @ret;
         }
-            
+
         public void WriteSectionValues(string sectionName)
         {
             if(!Sections.ContainsKey(sectionName)) return;
+
+            WaitForSync();
 
             Connection.Write($"configStart");
             Connection.Write($"configAdd Section {sectionName}");

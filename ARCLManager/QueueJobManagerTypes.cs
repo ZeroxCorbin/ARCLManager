@@ -272,7 +272,7 @@ namespace ARCLTypes
             {
                 if (Segments.Count > 0)
                 {
-                    foreach (KeyValuePair<string, QueueManagerJobSegment> que in Segments)
+                    foreach (KeyValuePair<string, QueueManagerJobSegment> que in Segments.OrderBy(x => x.Value.Order))
                     {
                         if (que.Value.Status != ARCLStatus.Completed)
                             return que.Value.SubStatus;
