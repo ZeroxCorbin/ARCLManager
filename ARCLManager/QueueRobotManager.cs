@@ -77,7 +77,7 @@ namespace ARCL
             {
                 SyncState.State = SyncStates.WAIT;
                 SyncState.Message = "Stop";
-                Connection?.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+               SyncStateChange?.Invoke(this, SyncState);
             }
             Connection?.StopReceiveAsync();
 
@@ -128,7 +128,7 @@ namespace ARCL
 
             SyncState.State = SyncStates.WAIT;
             SyncState.Message = "QueueShowRobot";
-            Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+            SyncStateChange?.Invoke(this, SyncState);
         }
         private void Stop_()
         {
@@ -164,7 +164,7 @@ namespace ARCL
                         if(SyncState.State == SyncStates.DELAYED)
                         {
                             SyncState.State = SyncStates.OK;
-                            Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                            SyncStateChange?.Invoke(this, SyncState);
                         }
                     }
                     else
@@ -172,7 +172,7 @@ namespace ARCL
                         if(SyncState.State != SyncStates.DELAYED)
                         {
                             SyncState.State = SyncStates.DELAYED;
-                            Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                           SyncStateChange?.Invoke(this, SyncState);
                         }
                     }
                 }
@@ -194,7 +194,7 @@ namespace ARCL
                 {
                     SyncState.State = SyncStates.OK;
                     SyncState.Message = "EndQueueShowRobot";
-                    Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                    SyncStateChange?.Invoke(this, SyncState);
                 }
                 return;
             }

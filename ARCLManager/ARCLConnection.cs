@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Linq;
 using System.Net;
+using System.Text.RegularExpressions;
 using ARCLTypes;
 using SocketManagerNS;
 
@@ -69,8 +70,10 @@ namespace ARCL
         public delegate void ConfigSectionUpdateEventHandler(object sender, ConfigSectionUpdateEventArgs data);
         public event ConfigSectionUpdateEventHandler ConfigSectionUpdate;
 
+        public new ARCLConnectionSettings ConnectionSettings { get => (ARCLConnectionSettings)base.ConnectionSettings; set => base.ConnectionSettings = value; }
+
         //Public
-        public ARCLConnection(string connectionString) : base(connectionString) { }
+        public ARCLConnection(ARCLConnectionSettings connectionSettings) : base(connectionSettings) { }
         public ARCLConnection() : base() { }
         /// <summary>
         /// Connect and Login to an ARCL server.
@@ -86,7 +89,7 @@ namespace ARCL
                 {
                     base.ConnectState += ARCLConnection_ConnectState;
 
-                    this.QueueTask("State", false, new Action(() => ConnectState?.Invoke(this, true)));
+                    ConnectState?.Invoke(this, true);
 
                     return true;
                 }
@@ -96,8 +99,19 @@ namespace ARCL
             else
                 base.Close();
 
-            this.QueueTask("State", false, new Action(() => ConnectState?.Invoke(this, false)));
+            ConnectState?.Invoke(this, false);
             return false;
+        }
+        public bool Connect(ARCLConnectionSettings connectionSettings, int timeout = 3000)
+        {
+            if (!ARCLConnectionSettings.ValidateConnectionString(connectionSettings.ConnectionString))
+            {
+                return false;
+            }
+
+            base.ConnectionSettings = connectionSettings;
+
+            return this.Connect(timeout);
         }
 
         public new void Close()
@@ -129,7 +143,7 @@ namespace ARCL
             if (!state)
                 base.ConnectState -= ARCLConnection_ConnectState;
 
-            this.QueueTask("State", false, new Action(() => ConnectState?.Invoke(sender, state)));
+            ConnectState?.Invoke(sender, state);
         }
         /// <summary>
         /// Writes the message to the ARCL server.
@@ -141,19 +155,6 @@ namespace ARCL
         public new bool Write(string msg) => base.Write(msg + "\r\n");
 
         /// <summary>
-        /// Gets the password portion of the connection string.
-        /// Extends SocketManager.ConnectionString to support a password.
-        /// </summary>
-        public string Password
-        {
-            get
-            {
-                if (ConnectionString.Count(c => c == ':') < 2) return string.Empty;
-                return ConnectionString.Split(':')[2];
-            }
-        }
-
-        /// <summary>
         /// Send password and wait for "End of commands\r\n"
         /// </summary>
         /// <returns>Success/Fail</returns>
@@ -163,28 +164,14 @@ namespace ARCL
             if (!msg.StartsWith("Enter password"))
                 return false;
 
-            Write(Password);
+            Write(ConnectionSettings.Password);
             string rm = Read("End of commands\r\n");
 
             if (rm.EndsWith("End of commands\r\n")) return true;
             else return false;
         }
 
-        public static string GenerateConnectionString(string ip, int port, string password) => $"{ip}:{port}:{password}";
-        public static string GenerateConnectionString(IPAddress ip, int port, string password) => $"{ip}:{port}:{password}";
-        public static new bool ValidateConnectionString(string connectionString)
-        {
-            if(connectionString.Count(c => c == ':') < 2) return false;
-            string[] spl = connectionString.Split(':');
 
-            if(!IPAddress.TryParse(spl[0], out IPAddress ip)) return false;
-
-            if(!int.TryParse(spl[1], out int port)) return false;
-
-            if(string.IsNullOrWhiteSpace(spl[2])) return false;
-
-            return true;
-        }
 
         //Private
         private void Connection_DataReceived(object sender, string data)
@@ -203,49 +190,52 @@ namespace ARCL
 
                 if ((message.StartsWith("QueueRobot", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndQueueShowRobot", StringComparison.CurrentCultureIgnoreCase)))
                 {
-                    this.QueueTask("QueueRobot", false, new Action(() => QueueRobotUpdate?.Invoke(this, new QueueRobotUpdateEventArgs(message))));
+                    QueueRobotUpdate?.Invoke(this, new QueueRobotUpdateEventArgs(message));
                     continue;
                 }
 
                 if ((message.StartsWith("QueueShow", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndQueueShow", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("QueueUpdate", StringComparison.CurrentCultureIgnoreCase)))
                 {
-                    this.QueueTask("QueueShow", false, new Action(() => QueueJobUpdate?.Invoke(this, new QueueManagerJobSegment(message))));
+                    QueueJobUpdate?.Invoke(this, new QueueManagerJobSegment(message));
                     continue;
                 }
 
                 if ((message.StartsWith("ExtIO", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndExtIO", StringComparison.CurrentCultureIgnoreCase)) && !message.Contains("Needed"))
                 {
-                    this.QueueTask("ExtIO", false, new Action(() => ExternalIOUpdate?.Invoke(this, new ExternalIOUpdateEventArgs(message))));
+                    ExternalIOUpdate?.Invoke(this, new ExternalIOUpdateEventArgs(message));
                     continue;
                 }
-
-                if (message.StartsWith("GetConfigSection", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndOfGetConfigSection", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("Configuration changed", StringComparison.CurrentCultureIgnoreCase))
+                if(Regex.Match(message, @"GetConfigSection", RegexOptions.IgnoreCase).Success || Regex.Match(message, @"Configuration changed", RegexOptions.IgnoreCase).Success)
                 {
-                    this.QueueTask("GetConfigSection", false, new Action(() => ConfigSectionUpdate?.Invoke(this, new ConfigSectionUpdateEventArgs(message))));
+                    ConfigSectionUpdate?.Invoke(this, new ConfigSectionUpdateEventArgs(message));
                     continue;
                 }
+                //if (message.StartsWith("GetConfigSection", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndOfGetConfigSection", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("Configuration changed", StringComparison.CurrentCultureIgnoreCase))
+                //{
 
+                //}
+                //CommandError: getconfigsectionvalues General
                 if (message.StartsWith("Status:"))
                 {
-                    this.QueueTask("Status", false, new Action(() => StatusUpdate?.Invoke(this, new StatusUpdateEventArgs(message)))); ;
+                    StatusUpdate?.Invoke(this, new StatusUpdateEventArgs(message)); ;
                     continue;
                 }
 
                 if (message.StartsWith("RangeDeviceGetCurrent:", StringComparison.CurrentCultureIgnoreCase))
                 {
-                    this.QueueTask("RangeDeviceGetCurrent", false, new Action(() => RangeDeviceCurrentUpdate?.Invoke(this, new RangeDeviceReadingUpdateEventArgs(message))));
+                    RangeDeviceCurrentUpdate?.Invoke(this, new RangeDeviceReadingUpdateEventArgs(message));
                     continue;
                 }
 
                 if (message.StartsWith("RangeDeviceGetCumulative:", StringComparison.CurrentCultureIgnoreCase))
                 {
-                    this.QueueTask("RangeDeviceGetCumulative", false, new Action(() => RangeDeviceCumulativeUpdate?.Invoke(this, new RangeDeviceReadingUpdateEventArgs(message))));
+                    RangeDeviceCumulativeUpdate?.Invoke(this, new RangeDeviceReadingUpdateEventArgs(message));
                     continue;
                 }
 
                 if (message.StartsWith("RangeDevice", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndOfRangeDeviceList", StringComparison.CurrentCultureIgnoreCase))
                 {
-                    this.QueueTask("RangeDevice", false, new Action(() => RangeDeviceUpdate?.Invoke(this, new RangeDeviceEventArgs(message))));
+                    RangeDeviceUpdate?.Invoke(this, new RangeDeviceEventArgs(message));
                     continue;
                 }
             }

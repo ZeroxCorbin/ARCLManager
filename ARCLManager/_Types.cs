@@ -104,6 +104,14 @@ namespace ARCLTypes
         WAIT = -1,
         DELAYED,
         UPDATING,
+        ERROR,
+        CHANGED,
+        SECTION_START,
+        LIST_START,
+        LIST_END,
+        VALUE,
+        END,
+        
         OK
     }
     public class ARCLCommands

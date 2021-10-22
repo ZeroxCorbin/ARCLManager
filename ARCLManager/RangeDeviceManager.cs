@@ -67,7 +67,6 @@ namespace ARCL
         /// <returns>False: Connection issue.</returns>
         public bool Start(int updateRate, ARCLConnection connection)
         {
-            UpdateRate = updateRate;
             Connection = connection;
 
             return Start(updateRate);
@@ -81,7 +80,7 @@ namespace ARCL
             {
                 SyncState.State = SyncStates.WAIT;
                 SyncState.Message = "Stop";
-                Connection?.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                SyncStateChange?.Invoke(this, SyncState);
             }
             Connection?.StopReceiveAsync();
 
@@ -124,6 +123,17 @@ namespace ARCL
         /// </summary>
         private bool Heartbeat { get; set; } = false;
 
+        private object updateLock = new object();
+
+        public bool GetLock()
+        {
+            bool __lockWasTaken = false;
+
+            Monitor.Enter(updateLock, ref __lockWasTaken);
+            return __lockWasTaken;
+        }
+        public void ReleaseLock() => Monitor.Exit(updateLock);
+
         private void Start_()
         {
             Connection.RangeDeviceUpdate += Connection_RangeDeviceUpdate;
@@ -134,7 +144,7 @@ namespace ARCL
 
             SyncState.State = SyncStates.WAIT;
             SyncState.Message = "RangeDeviceList";
-            Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+            SyncStateChange?.Invoke(this, SyncState);
         }
         private void Stop_()
         {
@@ -178,7 +188,7 @@ namespace ARCL
                         if(SyncState.State != SyncStates.OK)
                         {
                             SyncState.State = SyncStates.OK;
-                            Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                            SyncStateChange?.Invoke(this, SyncState);
                         }
                     }
                     else
@@ -186,7 +196,7 @@ namespace ARCL
                         if(SyncState.State != SyncStates.DELAYED)
                         {
                             SyncState.State = SyncStates.DELAYED;
-                            Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                            SyncStateChange?.Invoke(this, SyncState);
                         }
                     }
                 }
@@ -209,12 +219,15 @@ namespace ARCL
                 {
                     SyncState.State = SyncStates.OK;
                     SyncState.Message = "EndRangeDeviceList";
-                    Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                    SyncStateChange?.Invoke(this, SyncState);
                 }
                 return;
             }
-            if(!string.IsNullOrEmpty(device.RangeDevice.Name))
-                while(!Devices.TryAdd(device.RangeDevice.Name, device.RangeDevice)) { Devices.Locked = false; }
+
+
+            int i = 0;
+            if(!string.IsNullOrEmpty(device.RangeDevice.Name) && device.RangeDevice.Name.Contains("Laser"))
+                while(!Devices.TryAdd(device.RangeDevice.Name, device.RangeDevice)) { Devices.Locked = false; if (i++ > 1000) break; }
         }
 
 
@@ -230,27 +243,29 @@ namespace ARCL
         {
             if(Devices.ContainsKey(data.Name))
             {
-                Devices[data.Name].CumulativeReadings = data;
+                lock(updateLock)
+                    Devices[data.Name].CumulativeReadings = data;
                 Devices[data.Name].CumulativeReadingsInSync = true;
             }
 
             Heartbeat = true;
             TTL = Stopwatch.ElapsedMilliseconds;
 
-            Connection.QueueTask(true, new Action(() => RangeDeviceCurrentUpdate?.Invoke(data)));
+            RangeDeviceCurrentUpdate?.Invoke(data);
         }
         private void Connection_RangeDeviceCumulativeUpdate(object sender, RangeDeviceReadingUpdateEventArgs data)
         {
             if(Devices.ContainsKey(data.Name))
             {
-                Devices[data.Name].CurrentReadings = data;
+                lock (updateLock)
+                    Devices[data.Name].CurrentReadings = data;
                 Devices[data.Name].CurrentReadingsInSync = true;
             }
 
             Heartbeat = true;
             TTL = Stopwatch.ElapsedMilliseconds;
 
-            Connection.QueueTask(true, new Action(() => RangeDeviceCumulativeUpdate?.Invoke(data)));
+            RangeDeviceCumulativeUpdate?.Invoke(data);
         }
 
 

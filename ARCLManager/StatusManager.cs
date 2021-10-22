@@ -62,7 +62,6 @@ namespace ARCL
         /// <returns>False: Connection issue.</returns>
         public bool Start(int updateRate, ARCLConnection connection)
         {
-            UpdateRate = updateRate;
             Connection = connection;
 
             return Start(updateRate);
@@ -76,8 +75,9 @@ namespace ARCL
             {
                 SyncState.State = SyncStates.WAIT;
                 SyncState.Message = "Stop";
-                Connection?.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                SyncStateChange?.Invoke(this, SyncState);
             }
+
             Connection?.StopReceiveAsync();
 
             Stop_();
@@ -127,7 +127,7 @@ namespace ARCL
 
             SyncState.State = SyncStates.WAIT;
             SyncState.Message = "OneLineStatus";
-            Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+            SyncStateChange?.Invoke(this, SyncState);
         }
         private void Stop_()
         {
@@ -163,7 +163,7 @@ namespace ARCL
                         if(SyncState.State == SyncStates.DELAYED)
                         {
                             SyncState.State = SyncStates.OK;
-                            Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                            SyncStateChange?.Invoke(this, SyncState);
                         }
                     }
                     else
@@ -171,7 +171,7 @@ namespace ARCL
                         if(SyncState.State != SyncStates.DELAYED)
                         {
                             SyncState.State = SyncStates.DELAYED;
-                            Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                            SyncStateChange?.Invoke(this, SyncState);
                         }
                     }
                 }
@@ -193,11 +193,11 @@ namespace ARCL
             {
                 SyncState.State = SyncStates.OK;
                 SyncState.Message = "EndOneLineStatus";
-                Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                SyncStateChange?.Invoke(this, SyncState);
             }
 
 
-            Connection.QueueTask(false, new Action(() => StatusUpdate?.Invoke(sender, data)));
+            StatusUpdate?.Invoke(sender, data);
         }
 
 

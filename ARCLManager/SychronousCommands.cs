@@ -11,7 +11,7 @@ namespace ARCL
     public class SychronousCommands : ARCLConnection
     {
         //Public
-        public SychronousCommands(string connectionString) : base(connectionString) { }
+        public SychronousCommands(string connectionString) : base(new ARCLConnectionSettings(connectionString)) { }
 
         public List<RangeDevice> GetRangeDevices()
         {

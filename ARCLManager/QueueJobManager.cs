@@ -75,7 +75,7 @@ namespace ARCL
             {
                 SyncState.State = SyncStates.WAIT;
                 SyncState.Message = "Stop";
-                Connection?.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                SyncStateChange?.Invoke(this, SyncState);
             }
             Connection?.StopReceiveAsync();
 
@@ -119,7 +119,7 @@ namespace ARCL
 
             SyncState.State = SyncStates.WAIT;
             SyncState.Message = "QueueShow";
-            Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+            SyncStateChange?.Invoke(this, SyncState);
         }
         private void Stop_()
         {
@@ -135,7 +135,7 @@ namespace ARCL
                 {
                     SyncState.State = SyncStates.OK;
                     SyncState.Message = "EndQueueShow";
-                    Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                    SyncStateChange?.Invoke(this, SyncState);
                 }
                 return;
             }
@@ -171,7 +171,7 @@ namespace ARCL
             {
                 while(!Jobs.TryRemove(data.JobID, out QueueManagerJob job)) { Jobs.Locked = false; }
 
-                Connection.QueueTask(false, new Action(() => JobComplete?.Invoke(new object(), data)));
+               JobComplete?.Invoke(new object(), data);
             }
 
         }
@@ -195,7 +195,7 @@ namespace ARCL
 
             foreach(QueueManagerJobSegment g in segments)
             {
-                msg.Append(g.GoalName);
+                msg.Append($"\"{g.GoalName}\"");
                 msg.Append(space);
 
                 msg.Append(Enum.GetName(typeof(QueueManagerJobSegment.Types), g.Type));

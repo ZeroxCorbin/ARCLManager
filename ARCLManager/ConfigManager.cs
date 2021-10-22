@@ -51,10 +51,11 @@ namespace ARCL
         {
             if(Connection == null || !Connection.IsConnected)
                 return false;
-            if(!Connection.StartReceiveAsync())
-                return false;
 
-            Start_();
+            Connection.ConfigSectionUpdate += Connection_ConfigSectionUpdate;
+
+            if (!Connection.StartReceiveAsync())
+                return false;
 
             return true;
         }
@@ -78,11 +79,12 @@ namespace ARCL
             {
                 SyncState.State = SyncStates.WAIT;
                 SyncState.Message = "Stop";
-                Connection?.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                SyncStateChange?.Invoke(this, SyncState);
             }
             Connection?.StopReceiveAsync();
 
-            Stop_();
+            if(Connection != null)
+                Connection.ConfigSectionUpdate -= Connection_ConfigSectionUpdate;
         }
         /// <summary>
         /// Wait for the dictionary to be in sync with the ARCL server data.
@@ -95,7 +97,7 @@ namespace ARCL
             Stopwatch sw = new Stopwatch();
             sw.Restart();
 
-            while(SyncState.State != SyncStates.OK && sw.ElapsedMilliseconds < timeout)
+            while(SyncState.State != SyncStates.END && SyncState.State != SyncStates.ERROR && sw.ElapsedMilliseconds < timeout)
             { Thread.Sleep(10); }
 
             return SyncState.State == SyncStates.OK;
@@ -103,27 +105,20 @@ namespace ARCL
 
         public ConfigManager() { }
         public ConfigManager(ARCLConnection connection) => Connection = connection;
-        private void Start_()
+        private void GetSections()
         {
-            Connection.ConfigSectionUpdate += Connection_ConfigSectionUpdate;
-
             Sections.Clear();
 
             SyncState.State = SyncStates.WAIT;
             SyncState.Message = "GetConfigSectionList";
-            Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+           SyncStateChange?.Invoke(this, SyncState);
 
             Connection.Write($"getconfigsectionlist");
-        }
-        private void Stop_()
-        {
-            if(Connection != null)
-                Connection.ConfigSectionUpdate -= Connection_ConfigSectionUpdate;
         }
 
         private void Connection_ConfigSectionUpdate(object sender, ConfigSectionUpdateEventArgs data)
         {
-            if(data.IsChanged)
+            if(data.State == SyncStates.CHANGED)
             {
                 if(SectionChangeExpected)
                 {
@@ -135,28 +130,27 @@ namespace ARCL
                 {
                     SyncState.State = SyncStates.UPDATING;
                     SyncState.Message = "Configuration Changed";
-                    Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                    SyncStateChange?.Invoke(this, SyncState);
                 }
 
                 return;
             }
 
-            if(data.IsEnd)
+            if(data.State == SyncStates.END || data.State == SyncStates.ERROR)
             {
-                if(SyncState.State != SyncStates.OK)
-                {
-                    InProcessSectionName = null;
+                if(data.State == SyncStates.ERROR)
+                    while (!Sections.TryRemove(data.SectionName, out List<ConfigSection> config)) { Sections.Locked = false; }
 
-                    SyncState.State = SyncStates.OK;
-                    SyncState.Message = "EndGetConfigSection";
-                    Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
-                }
+                InProcessSectionName = null;
 
+                SyncState.State = data.State;
+                SyncState.Message = "EndGetConfigSection";
+                SyncStateChange?.Invoke(this, SyncState);
 
                 return;
             }
 
-            if(data.IsSectionName)
+            if(data.State == SyncStates.SECTION_START)
             {
                 if(Sections.ContainsKey(data.SectionName))
                     return;
@@ -188,7 +182,7 @@ namespace ARCL
 
                 SyncState.State = SyncStates.UPDATING;
                 SyncState.Message = $"GetConfigSectionValues {sectionName}";
-                Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                SyncStateChange?.Invoke(this, SyncState);
 
                 if(Sections.ContainsKey(sectionName))
                     Sections[sectionName].Clear();
@@ -200,7 +194,7 @@ namespace ARCL
                 while(InProcessSectionName != null)
                     Thread.Sleep(1);
 
-                return true;
+                return Sections.ContainsKey(sectionName);
             }
         }
         public bool ReadAllSectionsValues()
