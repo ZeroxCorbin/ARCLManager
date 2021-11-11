@@ -47,17 +47,12 @@ namespace ARCL
         /// This will load the dictionary.
         /// </summary>
         /// <returns>False: Connection issue.</returns>
-        public bool Start()
+        public void Start()
         {
             if(Connection == null || !Connection.IsConnected)
-                return false;
+                return;
 
             Connection.ConfigSectionUpdate += Connection_ConfigSectionUpdate;
-
-            if (!Connection.StartReceiveAsync())
-                return false;
-
-            return true;
         }
         /// <summary>
         /// Start the manager.
@@ -65,10 +60,10 @@ namespace ARCL
         /// </summary>
         /// <param name="connection">A connected ARCLConnection.</param>
         /// <returns>False: Connection issue.</returns>
-        public bool Start(ARCLConnection connection)
+        public void Start(ARCLConnection connection)
         {
             Connection = connection;
-            return Start();
+            Start();
         }
         /// <summary>
         /// Stop the manager.
@@ -81,7 +76,6 @@ namespace ARCL
                 SyncState.Message = "Stop";
                 SyncStateChange?.Invoke(this, SyncState);
             }
-            Connection?.StopReceiveAsync();
 
             if(Connection != null)
                 Connection.ConfigSectionUpdate -= Connection_ConfigSectionUpdate;
@@ -113,7 +107,7 @@ namespace ARCL
             SyncState.Message = "GetConfigSectionList";
            SyncStateChange?.Invoke(this, SyncState);
 
-            Connection.Write($"getconfigsectionlist");
+            Connection.Send($"getconfigsectionlist");
         }
 
         private void Connection_ConfigSectionUpdate(object sender, ConfigSectionUpdateEventArgs data)
@@ -189,7 +183,7 @@ namespace ARCL
                 else
                     while(!Sections.TryAdd(sectionName, new List<ConfigSection>())) { Sections.Locked = false; }
 
-                Connection.Write($"getconfigsectionvalues {sectionName}");
+                Connection.Send($"getconfigsectionvalues {sectionName}");
 
                 while(InProcessSectionName != null)
                     Thread.Sleep(1);
@@ -215,24 +209,24 @@ namespace ARCL
 
             WaitForSync();
 
-            Connection.Write($"configStart");
-            Connection.Write($"configAdd Section {sectionName}");
+            Connection.Send($"configStart");
+            Connection.Send($"configAdd Section {sectionName}");
 
             foreach(ConfigSection cs in Sections[sectionName])
             {
                 if(!string.IsNullOrEmpty(cs.Value))
                 {
                     if(cs.IsBeginList || cs.IsEndList)
-                        Connection.Write($"configAdd {cs.Value} {cs.Name}");
+                        Connection.Send($"configAdd {cs.Value} {cs.Name}");
                     else
-                        Connection.Write($"configAdd {cs.Name} {cs.Value}");
+                        Connection.Send($"configAdd {cs.Name} {cs.Value}");
                 }
                 else
                 {
-                    Connection.Write($"configAdd {cs.Name}");
+                    Connection.Send($"configAdd {cs.Name}");
                 }
             }
-            Connection.Write($"configParse");
+            Connection.Send($"configParse");
             SectionChangeExpected = true;
         }
 

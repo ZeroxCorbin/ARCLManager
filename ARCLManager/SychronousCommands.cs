@@ -17,7 +17,7 @@ namespace ARCL
         {
             List<RangeDevice> dev = new List<RangeDevice>();
 
-            this.Write("rangeDeviceList");
+            this.Send("rangeDeviceList");
 
             Thread.Sleep(500);
 
@@ -46,7 +46,7 @@ namespace ARCL
         {
             List<string> goals = new List<string>();
 
-            this.Write("getgoals");
+            this.Send("getgoals");
             string goalsString = this.Read("End of goals");
 
             string[] rawGoals = goalsString.Split('\r');
@@ -68,7 +68,7 @@ namespace ARCL
         {
             List<string> routes = new List<string>();
             this.Read();
-            this.Write("getroutes");
+            this.Send("getroutes");
             System.Threading.Thread.Sleep(500);
 
             string routesString = this.Read();
@@ -91,7 +91,7 @@ namespace ARCL
         {
             List<string> inputs = new List<string>();
             this.Read();
-            this.Write("inputlist");
+            this.Send("inputlist");
             System.Threading.Thread.Sleep(500);
 
             string inputsString = this.Read();
@@ -113,7 +113,7 @@ namespace ARCL
         {
             List<string> outputs = new List<string>();
             this.Read();
-            this.Write("outputlist");
+            this.Send("outputlist");
             System.Threading.Thread.Sleep(500);
 
             string outputsString = this.Read();
@@ -134,7 +134,7 @@ namespace ARCL
         public bool CheckInput(string inputname)
         {
             this.Read();
-            this.Write("inputQuery " + inputname);
+            this.Send("inputQuery " + inputname);
             System.Threading.Thread.Sleep(50);
 
             string status = this.Read();
@@ -149,7 +149,7 @@ namespace ARCL
         public bool CheckOutput(string outputname)
         {
             this.Read();
-            this.Write("outputQuery " + outputname);
+            this.Send("outputQuery " + outputname);
             System.Threading.Thread.Sleep(50);
 
             string status = this.Read();
@@ -164,9 +164,9 @@ namespace ARCL
         public bool SetOutput(string outputname, bool state)
         {
             if (state)
-                this.Write("outputOn " + outputname);
+                this.Send("outputOn " + outputname);
             else
-                this.Write("outputOff " + outputname);
+                this.Send("outputOff " + outputname);
 
             System.Threading.Thread.Sleep(50);
 
@@ -186,7 +186,7 @@ namespace ARCL
 
             //List<string> dev = new List<string>();
 
-            this.Write(string.Format("getconfigsectionvalues {0}\r\n", section));
+            this.Send(string.Format("getconfigsectionvalues {0}\r\n", section));
             System.Threading.Thread.Sleep(500);
 
             string msg = this.Read();
@@ -206,7 +206,7 @@ namespace ARCL
             //string[] messages;
             //Thread.Sleep(100);
             //this.ReadMessage();
-            //this.Write(string.Format("getconfigsectionvalues {0}\r\n", section));
+            //this.Send(string.Format("getconfigsectionvalues {0}\r\n", section));
             //Stopwatch sw = new Stopwatch();
             //sw.Start();
 
@@ -268,16 +268,16 @@ namespace ARCL
             return SectionValues;
         }
 
-        public bool Goto(string goalname) => this.Write($"goto {goalname}");
-        public bool GotoPoint(int x, int y, int heading) => this.Write($"gotopoint {x} {y} {heading}");
-        public bool Go() => this.Write($"go");
-        public bool PatrolOnce(string routename) => this.Write($"patrolonce {routename}");
-        public bool Patrol(string routename) => this.Write($"patrol {routename}");
-        public bool Say(string message) => this.Write($"say {message}");
-        public bool Stop() => this.Write("stop");
-        public bool Dock() => this.Write("dock");
-        public bool Undock() => this.Write("undock");
-        public bool Localize(int x, int y, int heading) => this.Write($"localizeToPoint {x} {y} {heading}");
+        public void Goto(string goalname) => this.Send($"goto {goalname}");
+        public void GotoPoint(int x, int y, int heading) => this.Send($"gotopoint {x} {y} {heading}");
+        public void Go() => this.Send($"go");
+        public void PatrolOnce(string routename) => this.Send($"patrolonce {routename}");
+        public void Patrol(string routename) => this.Send($"patrol {routename}");
+        public void Say(string message) => this.Send($"say {message}");
+        public void Stop() => this.Send("stop");
+        public void Dock() => this.Send("dock");
+        public void Undock() => this.Send("undock");
+        public void Localize(int x, int y, int heading) => this.Send($"localizeToPoint {x} {y} {heading}");
 
 
 
@@ -375,9 +375,9 @@ namespace ARCL
         public bool CreateExtIO(string name, int numIn, int numOut)
         {
             bool success = false;
-            Write("\r\n");
+            Send("\r\n");
             Read();
-            Write(string.Format("extioAdd {0} {1} {2}\r\n", name, numIn.ToString(), numOut.ToString()));
+            Send(string.Format("extioAdd {0} {1} {2}\r\n", name, numIn.ToString(), numOut.ToString()));
             string message = Read();
             int attempts = 0;
             while (String.IsNullOrEmpty(message))
@@ -424,29 +424,29 @@ namespace ARCL
 #if TRACE
             Console.WriteLine("Setting IO to defaults.");
 #endif
-            Write("configStart\r\n");
-            Write("configAdd Section External Digital Inputs\r\n");
+            Send("configStart\r\n");
+            Send("configAdd Section External Digital Inputs\r\n");
             for (int i = 1; i <= numIn; i++)
             {
-                Write("configAdd _beginList " + name + "_Input_" + i + "\r\n");
-                Write("configAdd Alias " + name + "_i" + i + "\r\n");
-                Write("configAdd _beginList OnList\r\n");
-                Write("configAdd Count 1\r\n");
-                Write("configAdd Type1 custom\r\n");
-                Write("configAdd _endList OnList\r\n");
-                Write("configAdd _endList " + name + "_Input_" + i + "\r\n");
+                Send("configAdd _beginList " + name + "_Input_" + i + "\r\n");
+                Send("configAdd Alias " + name + "_i" + i + "\r\n");
+                Send("configAdd _beginList OnList\r\n");
+                Send("configAdd Count 1\r\n");
+                Send("configAdd Type1 custom\r\n");
+                Send("configAdd _endList OnList\r\n");
+                Send("configAdd _endList " + name + "_Input_" + i + "\r\n");
             }
 
-            Write("configAdd Section External Digital Outputs\r\n");
+            Send("configAdd Section External Digital Outputs\r\n");
             for (int o = 1; o <= numIn; o++)
             {
-                Write("configAdd _beginList " + name + "_Output_" + o + "\r\n");
-                Write("configAdd Alias " + name + "_o" + o + "\r\n");
-                Write("configAdd Type1 custom\r\n");
-                Write("configAdd _endList " + name + "_Output_" + o + "\r\n");
+                Send("configAdd _beginList " + name + "_Output_" + o + "\r\n");
+                Send("configAdd Alias " + name + "_o" + o + "\r\n");
+                Send("configAdd Type1 custom\r\n");
+                Send("configAdd _endList " + name + "_Output_" + o + "\r\n");
             }
 
-            Write("configParse\r\n");
+            Send("configParse\r\n");
             Thread.Sleep(500);
 
         }
@@ -503,7 +503,7 @@ namespace ARCL
         {
             if (List[ioName + "_output"] != List[ioName + "_input"])
             {
-                Write(string.Format("extioInputUpdate {0} {1}", ioName, List[ioName + "_output"]));
+                Send(string.Format("extioInputUpdate {0} {1}", ioName, List[ioName + "_output"]));
             }
         }
 
@@ -524,7 +524,7 @@ namespace ARCL
                 }
                 if (List[ioName + "_output"] != List[ioName + "_input"])
                 {
-                    Write(string.Format("extioInputUpdate {0} {1}", ioName, List[ioName + "_output"]));
+                    Send(string.Format("extioInputUpdate {0} {1}", ioName, List[ioName + "_output"]));
                 }
 
                 Thread.Sleep(20);
@@ -544,7 +544,7 @@ namespace ARCL
 
             _value |= _valuePrev;
 
-            Write(string.Format("extIOOutputUpdate {0} {1}\r\n", output, _value));
+            Send(string.Format("extIOOutputUpdate {0} {1}\r\n", output, _value));
         }
 
         /// <summary>
@@ -559,7 +559,7 @@ namespace ARCL
 
             int value = int.Parse(bit, System.Globalization.NumberStyles.AllowHexSpecifier);
 
-            Write(string.Format("extioOutputUpdate {0} {1}\r\n", name, value));
+            Send(string.Format("extioOutputUpdate {0} {1}\r\n", name, value));
         }
 
         /// <summary>
@@ -579,7 +579,7 @@ namespace ARCL
 #if TRACE
             Console.WriteLine("Writing: " + string.Format("extIOOutputUpdate {0} {1}\r\n", output, _value));
 #endif
-            Write(string.Format("extIOOutputUpdate {0} {1}\r\n", output, _value));
+            Send(string.Format("extIOOutputUpdate {0} {1}\r\n", output, _value));
 
         }
 
@@ -595,7 +595,7 @@ namespace ARCL
 
             _value |= _valuePrev;
 
-            Write(string.Format("extIOInputUpdate {0} {1}\r\n", input, _value));
+            Send(string.Format("extIOInputUpdate {0} {1}\r\n", input, _value));
         }
 
         /// <summary>
@@ -613,13 +613,13 @@ namespace ARCL
             _value = ~value & 0xf;
             _value &= _valuePrev;
 
-            Write(string.Format("extIOInputUpdate {0} {1}\r\n", input, _value));
+            Send(string.Format("extIOInputUpdate {0} {1}\r\n", input, _value));
         }
 
         public double StateOfCharge()
         {
             this.Read();
-            this.Write("status");
+            this.Send("status");
             Thread.Sleep(25);
             string status;
             do
@@ -637,7 +637,7 @@ namespace ARCL
         public string GetLocation()
         {
             this.Read();
-            this.Write("status");
+            this.Send("status");
             Thread.Sleep(25);
             string status = Read("Temperature");
 

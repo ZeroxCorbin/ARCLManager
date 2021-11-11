@@ -8,10 +8,11 @@
 
   <ItemGroup>
     <Compile Remove="ArclReplay.cs" />
+    <Compile Remove="SychronousCommands.cs" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\SocketManager\SocketManager.csproj" />
+    <ProjectReference Include="..\..\AsyncSocket\AsyncSocket.csproj" />
   </ItemGroup>
 
 </Project>

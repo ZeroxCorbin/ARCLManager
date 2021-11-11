@@ -85,7 +85,7 @@ namespace ARCLTypes
                     Section = new ConfigSection(spl[0], spl[1]);
             }
 
-            
+
         }
         //public void Update(string msg)
         //{
@@ -135,11 +135,12 @@ namespace ARCLTypes
 
     public class RobotType
     {
-        public Dictionary<string, float> Variants = new Dictionary<string, float>()
+        public static Dictionary<string, float> Variants = new Dictionary<string, float>()
         {
-            { "HD-1500" , 80.0f },
-            { "LD-60" , 203.272f },
-            { "LD-90" , 203.272f }
+            { "HD-1500" , 201.0f },
+            { "LD-60" , 201.0f },
+            { "LD-90" , 201.0f },
+            { "LD-250-os32c" , 201.0f }
         };
 
         public string Model { get; set; }
@@ -155,10 +156,10 @@ namespace ARCLTypes
             {
                 if (cs == null)
                     continue;
-                
+
                 if (cs.Name.Contains("Model")) Model = cs.Value;
 
-                if(!string.IsNullOrEmpty(Model))
+                if (!string.IsNullOrEmpty(Model))
                 {
                     if (cs.IsBeginList)
                         if (cs.Name.Equals(Model))
@@ -167,11 +168,16 @@ namespace ARCLTypes
                             continue;
                         }
 
-
                     if (foundVariant)
                         if (cs.Name.Contains("Variant"))
                         {
-                            Variant = cs.Value;
+                            //if (cs.Value.Equals("LD-60") || cs.Value.Equals("LD-90"))
+                            //    Variant = "LD-60-90";
+                            //else if (cs.Value.StartsWith("LD-250"))
+                            //    Variant = "LD-250";
+                            //else
+                                Variant = cs.Value;
+
                             return;
                         }
                 }
@@ -204,12 +210,16 @@ namespace ARCLTypes
     }
     public class PathPlanningSettings
     {
-        public float FrontClearance { get; set; }
+        public float MaxSpeed { get; set; }
+        public float MaxRotSpeed { get; set; }
         public float SlowSpeed { get; set; }
-        public float SideClearanceAtSlowSpeed { get; set; }
+        public float FastSpeed { get; set; }
+
+        public float FrontClearance { get; set; }
         public float FrontPaddingAtSlowSpeed { get; set; }
         public float FrontPaddingAtFastSpeed { get; set; }
-        public float FastSpeed { get; set; }
+
+        public float SideClearanceAtSlowSpeed { get; set; }
         public float SideClearanceAtFastSpeed { get; set; }
 
         public float PlanFreeSpace { get; set; }
@@ -222,17 +232,24 @@ namespace ARCLTypes
         {
             foreach (ConfigSection cs in sections)
             {
-                if (cs.Name.StartsWith("FrontClearance")) FrontClearance = float.Parse(cs.Value);
-                if (cs.Name.StartsWith("SlowSpeed")) SlowSpeed = float.Parse(cs.Value);
-                if (cs.Name.StartsWith("SideClearanceAtSlowSpeed")) SideClearanceAtSlowSpeed = float.Parse(cs.Value);
-                if (cs.Name.StartsWith("FrontPaddingAtSlowSpeed")) FrontPaddingAtSlowSpeed = float.Parse(cs.Value);
-                if (cs.Name.StartsWith("FastSpeed")) FastSpeed = float.Parse(cs.Value);
-                if (cs.Name.StartsWith("SideClearanceAtFastSpeed")) SideClearanceAtFastSpeed = float.Parse(cs.Value);
-                if (cs.Name.StartsWith("FrontPaddingAtFastSpeed")) FrontPaddingAtFastSpeed = float.Parse(cs.Value);
-                if (cs.Name.StartsWith("PlanFreeSpace")) PlanFreeSpace = float.Parse(cs.Value);
+                if (cs.Name.Equals("MaxSpeed")) MaxSpeed = float.Parse(cs.Value);
+                if (cs.Name.Equals("MaxRotSpeed")) MaxSpeed = float.Parse(cs.Value);
 
-                if (cs.Name.StartsWith("GoalDistanceTol")) GoalDistanceTolerance = float.Parse(cs.Value);
-                if (cs.Name.StartsWith("GoalAngleTol")) GoalAngleTolerance = float.Parse(cs.Value);
+                if (cs.Name.Equals("SlowSpeed")) SlowSpeed = float.Parse(cs.Value);
+                if (cs.Name.Equals("FastSpeed")) FastSpeed = float.Parse(cs.Value);
+
+                if (cs.Name.Equals("FrontClearance")) FrontClearance = float.Parse(cs.Value);
+
+                if (cs.Name.Equals("FrontPaddingAtSlowSpeed")) FrontPaddingAtSlowSpeed = float.Parse(cs.Value);
+                if (cs.Name.Equals("FrontPaddingAtFastSpeed")) FrontPaddingAtFastSpeed = float.Parse(cs.Value);
+
+                if (cs.Name.Equals("SideClearanceAtSlowSpeed")) SideClearanceAtSlowSpeed = float.Parse(cs.Value);
+                if (cs.Name.Equals("SideClearanceAtFastSpeed")) SideClearanceAtFastSpeed = float.Parse(cs.Value);
+
+                if (cs.Name.Equals("PlanFreeSpace")) PlanFreeSpace = float.Parse(cs.Value);
+
+                if (cs.Name.Equals("GoalDistanceTol")) GoalDistanceTolerance = float.Parse(cs.Value);
+                if (cs.Name.Equals("GoalAngleTol")) GoalAngleTolerance = float.Parse(cs.Value);
             }
         }
     }

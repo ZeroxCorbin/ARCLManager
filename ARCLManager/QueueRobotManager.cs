@@ -47,8 +47,6 @@ namespace ARCL
 
             if(Connection == null || !Connection.IsConnected)
                 return false;
-            if(!Connection.StartReceiveAsync())
-                return false;
 
             Start_();
 
@@ -79,7 +77,6 @@ namespace ARCL
                 SyncState.Message = "Stop";
                SyncStateChange?.Invoke(this, SyncState);
             }
-            Connection?.StopReceiveAsync();
 
             Stop_();
         }
@@ -153,7 +150,7 @@ namespace ARCL
                     if(SyncState.State == SyncStates.OK)
                         Stopwatch.Reset();
 
-                    Connection.Write("queueShowRobot");
+                    Connection.Send("queueShowRobot");
 
                     Heartbeat = false;
 

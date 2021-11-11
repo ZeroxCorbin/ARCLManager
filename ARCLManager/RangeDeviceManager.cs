@@ -51,8 +51,6 @@ namespace ARCL
 
             if(Connection == null || !Connection.IsConnected)
                 return false;
-            if(!Connection.StartReceiveAsync())
-                return false;
 
             Start_();
 
@@ -82,7 +80,6 @@ namespace ARCL
                 SyncState.Message = "Stop";
                 SyncStateChange?.Invoke(this, SyncState);
             }
-            Connection?.StopReceiveAsync();
 
             Stop_();
         }
@@ -140,19 +137,24 @@ namespace ARCL
 
             Devices.Clear();
 
-            Connection.Write("rangeDeviceList");
+            Connection.Send("rangeDeviceList");
 
             SyncState.State = SyncStates.WAIT;
             SyncState.Message = "RangeDeviceList";
             SyncStateChange?.Invoke(this, SyncState);
         }
+        private bool _stopped = false;
         private void Stop_()
         {
             if(Connection != null)
                 Connection.RangeDeviceUpdate -= Connection_RangeDeviceUpdate;
 
-            IsRunning = false;
-            Thread.Sleep(UpdateRate + 100);
+            if (!IsRunning) return;
+
+            while (!_stopped)
+                IsRunning = false;
+
+            _stopped = false;
         }
 
         public RangeDeviceManager() { }
@@ -174,10 +176,10 @@ namespace ARCL
                         Stopwatch.Reset();
 
                     foreach(KeyValuePair<string, RangeDevice> l in Devices)
-                        Connection.Write("rangeDeviceGetCurrent " + l.Key);
+                        Connection.Send("rangeDeviceGetCurrent " + l.Key);
 
                     foreach(KeyValuePair<string, RangeDevice> l in Devices)
-                        Connection.Write("rangeDeviceGetCumulative " + l.Key);
+                        Connection.Send("rangeDeviceGetCumulative " + l.Key);
 
                     Heartbeat = false;
 
@@ -203,6 +205,7 @@ namespace ARCL
             }
             finally
             {
+                _stopped = true;
                 IsRunning = false;
                 Connection.RangeDeviceCurrentUpdate -= Connection_RangeDeviceCurrentUpdate;
                 Connection.RangeDeviceCumulativeUpdate -= Connection_RangeDeviceCumulativeUpdate;
@@ -243,9 +246,9 @@ namespace ARCL
         {
             if(Devices.ContainsKey(data.Name))
             {
-                lock(updateLock)
-                    Devices[data.Name].CumulativeReadings = data;
-                Devices[data.Name].CumulativeReadingsInSync = true;
+                lock (updateLock)
+                    Devices[data.Name].CurrentReadings = data;
+                Devices[data.Name].CurrentReadingsInSync = true;
             }
 
             Heartbeat = true;
@@ -257,9 +260,9 @@ namespace ARCL
         {
             if(Devices.ContainsKey(data.Name))
             {
-                lock (updateLock)
-                    Devices[data.Name].CurrentReadings = data;
-                Devices[data.Name].CurrentReadingsInSync = true;
+                lock(updateLock)
+                    Devices[data.Name].CumulativeReadings = data;
+                Devices[data.Name].CumulativeReadingsInSync = true;
             }
 
             Heartbeat = true;

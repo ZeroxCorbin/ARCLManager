@@ -46,8 +46,6 @@ namespace ARCL
 
             if(Connection == null || !Connection.IsConnected)
                 return false;
-            if(!Connection.StartReceiveAsync())
-                return false;
 
             Start_();
 
@@ -78,8 +76,6 @@ namespace ARCL
                 SyncStateChange?.Invoke(this, SyncState);
             }
 
-            Connection?.StopReceiveAsync();
-
             Stop_();
         }
         /// <summary>
@@ -109,7 +105,7 @@ namespace ARCL
         /// <summary>
         /// Stores the provided update rate for the Update_Thread. (ms)
         /// </summary>
-        private int UpdateRate { get; set; } = 500;
+        public int UpdateRate { get; set; } = 500;
         /// <summary>
         /// Used to time the message response. (TTL)
         /// </summary>
@@ -129,10 +125,16 @@ namespace ARCL
             SyncState.Message = "OneLineStatus";
             SyncStateChange?.Invoke(this, SyncState);
         }
+
+        private bool _stopped = false;
         private void Stop_()
         {
-            IsRunning = false;
-            Thread.Sleep(UpdateRate + 100);
+            if (!IsRunning) return;
+
+            while(!_stopped)
+                IsRunning = false;
+
+            _stopped = false;
         }
 
         public StatusManager() { }
@@ -140,10 +142,11 @@ namespace ARCL
 
         private void StatusUpdate_Thread(object sender)
         {
-            IsRunning = true;
             Stopwatch.Reset();
 
             Connection.StatusUpdate += Connection_StatusUpdate;
+
+            IsRunning = true;
 
             try
             {
@@ -152,11 +155,17 @@ namespace ARCL
                     if(SyncState.State == SyncStates.OK)
                         Stopwatch.Reset();
 
-                    Connection.Write("onelinestatus");
+                    Connection.Send("onelinestatus");
 
                     Heartbeat = false;
 
-                    Thread.Sleep(UpdateRate);
+                    int start = Environment.TickCount;
+                    while(Environment.TickCount - start < UpdateRate)
+                    {
+                        Thread.Sleep(50);
+                        if (!IsRunning)
+                            return;
+                    }
 
                     if(Heartbeat)
                     {
@@ -178,6 +187,7 @@ namespace ARCL
             }
             finally
             {
+                _stopped = true;
                 IsRunning = false;
                 Connection.StatusUpdate -= Connection_StatusUpdate;
             }
