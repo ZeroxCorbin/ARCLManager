@@ -4,6 +4,7 @@
     <TargetFrameworks>netstandard2.1;net472</TargetFrameworks>
     <Configurations>Debug;Release;MobileConfiguration</Configurations>
     <LangVersion>8.0</LangVersion>
+    <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
 
   <ItemGroup>
