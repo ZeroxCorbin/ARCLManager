@@ -120,7 +120,7 @@ namespace ARCL
             return false;
         }
 
-        private void ARCLConnection_CloseEvent(object sender, EventArgs e)
+        private void ARCLConnection_CloseEvent()
         {
             IsLoggedIn = false;
         }
