@@ -42,18 +42,14 @@ namespace ARCL
         /// </summary>
         /// <param name="updateRate">How often to send a request to update the dictionary's Values.</param>
         /// <returns>False: Connection issue.</returns>
-        public bool Start(int updateRate)
+        public void Start(int updateRate)
         {
             UpdateRate = updateRate;
 
             if(Connection == null || !Connection.IsConnected)
-                return false;
-            if(!Connection.StartReceiveAsync())
-                return false;
+                return;
 
             Start_();
-
-            return true;
         }
         /// <summary>
         /// Start the manager.
@@ -62,12 +58,12 @@ namespace ARCL
         /// <param name="updateRate">How often to send a request to update the dictionary's Values.</param>
         /// <param name="connection">A connected ARCLConnection.</param>
         /// <returns>False: Connection issue.</returns>
-        public bool Start(int updateRate, ARCLConnection connection)
+        public void Start(int updateRate, ARCLConnection connection)
         {
             UpdateRate = updateRate;
             Connection = connection;
 
-            return Start(updateRate);
+            Start(updateRate);
         }
         /// <summary>
         /// Stop the manager.
@@ -78,9 +74,8 @@ namespace ARCL
             {
                 SyncState.State = SyncStates.WAIT;
                 SyncState.Message = "Stop";
-                Connection?.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                SyncStateChange?.Invoke(this, SyncState);
             }
-            Connection?.StopReceiveAsync();
 
             Stop_();
         }
@@ -130,7 +125,7 @@ namespace ARCL
 
             SyncState.State = SyncStates.WAIT;
             SyncState.Message = "ExtIODump";
-            Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+            SyncStateChange?.Invoke(this, SyncState);
         }
         private void Stop_()
         {
@@ -156,7 +151,7 @@ namespace ARCL
                         Stopwatch.Reset();
 
                     if(Connection.IsConnected)
-                        Connection.Write("extIODump");
+                        Connection.Send("extIODump");
                     else
                     {
                         Stop();
@@ -173,7 +168,7 @@ namespace ARCL
                         {
                             SyncState.State = SyncStates.OK;
                             SyncState.Message = "ExtIODump";
-                            Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                            SyncStateChange?.Invoke(this, SyncState);
                         }
                     }
                     else
@@ -182,7 +177,7 @@ namespace ARCL
                         {
                             SyncState.State = SyncStates.DELAYED;
                             SyncState.Message = "ExtIODump";
-                            Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                            SyncStateChange?.Invoke(this, SyncState);
                         }
                     }
                 }
@@ -208,7 +203,7 @@ namespace ARCL
                     {
                         SyncState.State = SyncStates.OK;
                         SyncState.Message = "EndExtIODump";
-                        Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                        SyncStateChange?.Invoke(this, SyncState);
                     }
                 }
                 return;
@@ -234,7 +229,7 @@ namespace ARCL
                     if(!IsIOUpdate)
                     {
                         SyncState.State = SyncStates.OK;
-                        Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                        SyncStateChange?.Invoke(this, SyncState);
                     }
 
                 return;
@@ -258,7 +253,7 @@ namespace ARCL
                 if(!IsIOUpdate)
                 {
                     SyncState.State = SyncStates.OK;
-                    Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                    SyncStateChange?.Invoke(this, SyncState);
                 }
 
                 return;
@@ -266,7 +261,7 @@ namespace ARCL
         }
 
         public ReadOnlyConcurrentDictionary<string, ExtIOSet> ActiveSets { get; } = new ReadOnlyConcurrentDictionary<string, ExtIOSet>(10, 100);
-        public ReadOnlyDictionary<string, ExtIOSet> DesiredSets { get; private set; }
+        public ReadOnlyDictionary<string, ExtIOSet> DesiredSets { get; set; }
 
         private Dictionary<string, ExtIOSet> InProcessSets { get; set; } = new Dictionary<string, ExtIOSet>();
         private bool IsIOUpdate { get; set; } = false;
@@ -284,7 +279,7 @@ namespace ARCL
             for(int i = 1; i <= ActiveSets.Count; i++)
             {
                 ActiveSets[i.ToString()].AddedForPendingUpdate = true;
-                res &= Connection.Write(ActiveSets[i.ToString()].WriteInputCommand);
+                Connection.Send(ActiveSets[i.ToString()].WriteInputCommand);
             }
 
             return res ^= true;
@@ -298,15 +293,17 @@ namespace ARCL
             if(ActiveSets.Count == 0)
                 return false;
 
-            return Dump();
+            Dump();
+
+            return true;
         }
 
-        private bool Dump()
+        private void Dump()
         {
             foreach(KeyValuePair<string, ExtIOSet> set in ActiveSets)
                 set.Value.AddedForPendingUpdate = true;
 
-            return Connection.Write("extIODump");
+            Connection.Send("extIODump");
         }
         private bool SyncDesiredSets()
         {
@@ -341,7 +338,7 @@ namespace ARCL
             {
                 if(set.Value.AddedForPendingUpdate) continue;
                 else
-                    Connection.Write(set.Value.CreateSetCommand);
+                    Connection.Send(set.Value.CreateSetCommand);
             }
 
             ThreadPool.QueueUserWorkItem(new WaitCallback(CreateIOWaitThread));

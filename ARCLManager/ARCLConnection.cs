@@ -1,8 +1,9 @@
 ﻿using System;
 using System.Linq;
 using System.Net;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
 using ARCLTypes;
-using SocketManagerNS;
 
 namespace ARCL
 {
@@ -14,13 +15,13 @@ namespace ARCL
     /// Hides: Connect(), Write(), ConnectState Event
     /// Extends: Password, Login()
     /// </summary>
-    public class ARCLConnection : SocketManager
+    public class ARCLConnection : AsyncSocket.ASocketManager
     {
         /// <summary>
         /// Raised when the connection to the ARCL Server changes.
         /// </summary>
-        public new event ConnectedEventHandler ConnectState;
-
+        //public new event ConnectedEventHandler ConnectState;
+        public event EventHandler LoggedInEvent;
         /// <summary>
         /// A message that starts with "Queue" or "EndQueue" and does not contain "Robot".
         /// </summary>
@@ -69,187 +70,145 @@ namespace ARCL
         public delegate void ConfigSectionUpdateEventHandler(object sender, ConfigSectionUpdateEventArgs data);
         public event ConfigSectionUpdateEventHandler ConfigSectionUpdate;
 
-        //Public
-        public ARCLConnection(string connectionString) : base(connectionString) { }
+        public bool IsLoggedIn { get; private set; }
+
+        private string Password;
+
         public ARCLConnection() : base() { }
         /// <summary>
         /// Connect and Login to an ARCL server.
-        /// Hides SocketManager.Connect()
+        /// Hides ASocketManager.Connect()
         /// </summary>
         /// <param name="timeout">How long to wait for a connection.</param>
         /// <returns>Conenction or Login failed / succeeded</returns>
-        public new bool Connect(int timeout = 3000)
+        public bool Connect(string host, int port, string password, int timeout = 5000)
         {
-            if (base.Connect(timeout))
+            return Connect(new ARCLConnectionSettings($"{host}:{port}:{password}"), timeout);
+        }
+        public bool Connect(ARCLConnectionSettings settings, int timeout = 5000)
+        {
+            if (base.IsConnected & IsLoggedIn) return true;
+
+            Password = settings.Password;
+
+            base.ExceptionEvent -= ARCLConnection_ExceptionEvent;
+            base.ExceptionEvent += ARCLConnection_ExceptionEvent;
+
+            base.CloseEvent -= ARCLConnection_CloseEvent;
+            base.CloseEvent += ARCLConnection_CloseEvent;
+
+            if (base.Connect(settings, timeout))
             {
-                if (Login())
+                StartReceiveAsync();
+
+                int start = Environment.TickCount;
+                while (!IsLoggedIn)
                 {
-                    base.ConnectState += ARCLConnection_ConnectState;
-
-                    this.QueueTask("State", false, new Action(() => ConnectState?.Invoke(this, true)));
-
-                    return true;
+                    if ((Environment.TickCount - start) > timeout)
+                        break;
+                    if (!base.IsConnected)
+                        break;
                 }
-                else
+                if (!IsLoggedIn)
+                {
+                    HandleException(new Exception("Could not login."));
                     base.Close();
+                    return false;
+                }
+                return true;
             }
-            else
-                base.Close();
-
-            this.QueueTask("State", false, new Action(() => ConnectState?.Invoke(this, false)));
             return false;
         }
 
-        public new void Close()
+        private void ARCLConnection_CloseEvent()
         {
-            base.DataReceived -= Connection_DataReceived;
-
-            base.Close();
+            IsLoggedIn = false;
         }
 
-        public new bool StartReceiveAsync(char messageTerminator = '\n')
+        private void ARCLConnection_ExceptionEvent(object sender, EventArgs e)
         {
-            if(IsReceivingAsync)
-                return true;
-
-            base.DataReceived += Connection_DataReceived;
-
-            return base.StartReceiveAsync(messageTerminator);
+            IsLoggedIn = false;
         }
 
-        public new void StopReceiveAsync(bool force = false)
+        public void StartReceiveAsync()
         {
-            base.DataReceived -= Connection_DataReceived;
+            if (base.IsReceiving)
+                return;
 
-            base.StopReceiveAsync(force);
+            base.MessageEvent -= ARCLConnection_MessageEvent;
+            base.MessageEvent += ARCLConnection_MessageEvent;
+
+            base.StartReceiveMessages("\r\n");
         }
 
-        private void ARCLConnection_ConnectState(object sender, bool state)
-        {
-            if (!state)
-                base.ConnectState -= ARCLConnection_ConnectState;
-
-            this.QueueTask("State", false, new Action(() => ConnectState?.Invoke(sender, state)));
-        }
-        /// <summary>
-        /// Writes the message to the ARCL server.
-        /// Appends "\r\n" to the message.
-        /// Hides SocketManager.Write()
-        /// </summary>
-        /// <param name="msg"></param>
-        /// <returns></returns>
-        public new bool Write(string msg) => base.Write(msg + "\r\n");
-
-        /// <summary>
-        /// Gets the password portion of the connection string.
-        /// Extends SocketManager.ConnectionString to support a password.
-        /// </summary>
-        public string Password
-        {
-            get
-            {
-                if (ConnectionString.Count(c => c == ':') < 2) return string.Empty;
-                return ConnectionString.Split(':')[2];
-            }
-        }
-
-        /// <summary>
-        /// Send password and wait for "End of commands\r\n"
-        /// </summary>
-        /// <returns>Success/Fail</returns>
-        private bool Login()
-        {
-            string msg = Read('\n');
-            if (!msg.StartsWith("Enter password"))
-                return false;
-
-            Write(Password);
-            string rm = Read("End of commands\r\n");
-
-            if (rm.EndsWith("End of commands\r\n")) return true;
-            else return false;
-        }
-
-        public static string GenerateConnectionString(string ip, int port, string password) => $"{ip}:{port}:{password}";
-        public static string GenerateConnectionString(IPAddress ip, int port, string password) => $"{ip}:{port}:{password}";
-        public static new bool ValidateConnectionString(string connectionString)
-        {
-            if(connectionString.Count(c => c == ':') < 2) return false;
-            string[] spl = connectionString.Split(':');
-
-            if(!IPAddress.TryParse(spl[0], out IPAddress ip)) return false;
-
-            if(!int.TryParse(spl[1], out int port)) return false;
-
-            if(string.IsNullOrWhiteSpace(spl[2])) return false;
-
-            return true;
-        }
+        public new void Send(string msg) => base.Send(msg + "\r\n");
 
         //Private
-        private void Connection_DataReceived(object sender, string data)
+        private void ARCLConnection_MessageEvent(object sender, EventArgs e)
         {
-            string[] messages = data.Split('\n');
+            string message = ((string)sender).Trim('\r', '\n');
 
-            foreach(string msg in messages)
+            if (!IsLoggedIn)
             {
-                string message = msg.Trim('\r');
-
-                //if (message.StartsWith("CommandError:"))
-                //{
-                //    this.QueueTask("CommandError", false, new Action(() => StatusUpdate?.Invoke(this, new StatusUpdateEventArgs(message)))); ;
-                //    continue;
-                //}
-
-                if ((message.StartsWith("QueueRobot", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndQueueShowRobot", StringComparison.CurrentCultureIgnoreCase)))
+                if (message.StartsWith("Enter password:"))
                 {
-                    this.QueueTask("QueueRobot", false, new Action(() => QueueRobotUpdate?.Invoke(this, new QueueRobotUpdateEventArgs(message))));
-                    continue;
+                    Send(Password);
+                    return;
                 }
-
-                if ((message.StartsWith("QueueShow", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndQueueShow", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("QueueUpdate", StringComparison.CurrentCultureIgnoreCase)))
+                if (message.Contains("End of commands"))
                 {
-                    this.QueueTask("QueueShow", false, new Action(() => QueueJobUpdate?.Invoke(this, new QueueManagerJobSegment(message))));
-                    continue;
-                }
+                    IsLoggedIn = true;
 
-                if ((message.StartsWith("ExtIO", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndExtIO", StringComparison.CurrentCultureIgnoreCase)) && !message.Contains("Needed"))
-                {
-                    this.QueueTask("ExtIO", false, new Action(() => ExternalIOUpdate?.Invoke(this, new ExternalIOUpdateEventArgs(message))));
-                    continue;
+                    Task.Run(() => LoggedInEvent?.Invoke(null, null));
                 }
-
-                if (message.StartsWith("GetConfigSection", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndOfGetConfigSection", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("Configuration changed", StringComparison.CurrentCultureIgnoreCase))
-                {
-                    this.QueueTask("GetConfigSection", false, new Action(() => ConfigSectionUpdate?.Invoke(this, new ConfigSectionUpdateEventArgs(message))));
-                    continue;
-                }
-
-                if (message.StartsWith("Status:"))
-                {
-                    this.QueueTask("Status", false, new Action(() => StatusUpdate?.Invoke(this, new StatusUpdateEventArgs(message)))); ;
-                    continue;
-                }
-
-                if (message.StartsWith("RangeDeviceGetCurrent:", StringComparison.CurrentCultureIgnoreCase))
-                {
-                    this.QueueTask("RangeDeviceGetCurrent", false, new Action(() => RangeDeviceCurrentUpdate?.Invoke(this, new RangeDeviceReadingUpdateEventArgs(message))));
-                    continue;
-                }
-
-                if (message.StartsWith("RangeDeviceGetCumulative:", StringComparison.CurrentCultureIgnoreCase))
-                {
-                    this.QueueTask("RangeDeviceGetCumulative", false, new Action(() => RangeDeviceCumulativeUpdate?.Invoke(this, new RangeDeviceReadingUpdateEventArgs(message))));
-                    continue;
-                }
-
-                if (message.StartsWith("RangeDevice", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndOfRangeDeviceList", StringComparison.CurrentCultureIgnoreCase))
-                {
-                    this.QueueTask("RangeDevice", false, new Action(() => RangeDeviceUpdate?.Invoke(this, new RangeDeviceEventArgs(message))));
-                    continue;
-                }
+                return;
             }
 
+            if (message.StartsWith("Status:"))
+            {
+                StatusUpdate?.Invoke(this, new StatusUpdateEventArgs(message)); ;
+                return;
+            }
+
+            if (message.StartsWith("RangeDeviceGetCurrent:", StringComparison.CurrentCultureIgnoreCase))
+            {
+                RangeDeviceCurrentUpdate?.Invoke(this, new RangeDeviceReadingUpdateEventArgs(message));
+                return;
+            }
+
+            if (message.StartsWith("RangeDeviceGetCumulative:", StringComparison.CurrentCultureIgnoreCase))
+            {
+                RangeDeviceCumulativeUpdate?.Invoke(this, new RangeDeviceReadingUpdateEventArgs(message));
+                return;
+            }
+
+            if (message.StartsWith("QueueRobot", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndQueueShowRobot", StringComparison.CurrentCultureIgnoreCase))
+            {
+                QueueRobotUpdate?.Invoke(this, new QueueRobotUpdateEventArgs(message));
+                return;
+            }
+
+            if (message.StartsWith("QueueShow", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndQueueShow", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("QueueUpdate", StringComparison.CurrentCultureIgnoreCase))
+            {
+                QueueJobUpdate?.Invoke(this, new QueueManagerJobSegment(message));
+                return;
+            }
+
+            if ((message.StartsWith("ExtIO", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndExtIO", StringComparison.CurrentCultureIgnoreCase)) && !message.Contains("Needed"))
+            {
+                ExternalIOUpdate?.Invoke(this, new ExternalIOUpdateEventArgs(message));
+                return;
+            }
+            if (Regex.Match(message, @"GetConfigSection", RegexOptions.IgnoreCase).Success || Regex.Match(message, @"Configuration changed", RegexOptions.IgnoreCase).Success)
+            {
+                ConfigSectionUpdate?.Invoke(this, new ConfigSectionUpdateEventArgs(message));
+                return;
+            }
+            if (message.StartsWith("RangeDevice", StringComparison.CurrentCultureIgnoreCase) || message.StartsWith("EndOfRangeDeviceList", StringComparison.CurrentCultureIgnoreCase))
+            {
+                RangeDeviceUpdate?.Invoke(this, new RangeDeviceEventArgs(message));
+                return;
+            }
         }
     }
 }

@@ -134,7 +134,7 @@ namespace ARCLTypes
             {
                 try
                 {
-                    if (spl.Length != 15)
+                    if (spl.Length < 15)
                         throw new Exception($"Invalid QueueShow or QueueUpdate message length.");
 
                     ID = spl[1];

@@ -47,8 +47,6 @@ namespace ARCL
         {
             if(Connection == null || !Connection.IsConnected)
                 return false;
-            if(!Connection.StartReceiveAsync())
-                return false;
 
             Start_();
 
@@ -75,9 +73,8 @@ namespace ARCL
             {
                 SyncState.State = SyncStates.WAIT;
                 SyncState.Message = "Stop";
-                Connection?.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                SyncStateChange?.Invoke(this, SyncState);
             }
-            Connection?.StopReceiveAsync();
 
             Stop_();
         }
@@ -115,11 +112,11 @@ namespace ARCL
 
             Jobs.Clear();
 
-            Connection.Write("QueueShow");
+            Connection.Send("QueueShow");
 
             SyncState.State = SyncStates.WAIT;
             SyncState.Message = "QueueShow";
-            Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+            SyncStateChange?.Invoke(this, SyncState);
         }
         private void Stop_()
         {
@@ -135,7 +132,7 @@ namespace ARCL
                 {
                     SyncState.State = SyncStates.OK;
                     SyncState.Message = "EndQueueShow";
-                    Connection.QueueTask(true, new Action(() => SyncStateChange?.Invoke(this, SyncState)));
+                    SyncStateChange?.Invoke(this, SyncState);
                 }
                 return;
             }
@@ -171,7 +168,7 @@ namespace ARCL
             {
                 while(!Jobs.TryRemove(data.JobID, out QueueManagerJob job)) { Jobs.Locked = false; }
 
-                Connection.QueueTask(false, new Action(() => JobComplete?.Invoke(new object(), data)));
+               JobComplete?.Invoke(new object(), data);
             }
 
         }
@@ -179,7 +176,7 @@ namespace ARCL
         public delegate void JobCompleteEventHandler(object sender, QueueManagerJobSegment data);
         public event JobCompleteEventHandler JobComplete;
         public ReadOnlyConcurrentDictionary<string, QueueManagerJob> Jobs { get; private set; } = new ReadOnlyConcurrentDictionary<string, QueueManagerJob>(10, 100);
-        public bool QueueMulti(List<QueueManagerJobSegment> segments)
+        public void QueueMulti(List<QueueManagerJobSegment> segments)
         {
             StringBuilder msg = new StringBuilder();
             string space = " ";
@@ -195,7 +192,7 @@ namespace ARCL
 
             foreach(QueueManagerJobSegment g in segments)
             {
-                msg.Append(g.GoalName);
+                msg.Append($"\"{g.GoalName}\"");
                 msg.Append(space);
 
                 msg.Append(Enum.GetName(typeof(QueueManagerJobSegment.Types), g.Type));
@@ -208,7 +205,7 @@ namespace ARCL
             if(!string.IsNullOrEmpty(segments[0].JobID))
                 msg.Append(segments[0].JobID);
 
-            return Connection.Write(msg.ToString());
+            Connection.Send(msg.ToString());
         }
         /// <summary>
         /// Modify a the goal of a job segment.
@@ -291,9 +288,9 @@ namespace ARCL
         }
 
         //Private
-        private bool QueueShow(ARCLJobStatusRequestTypes status) => Connection.Write($"queueShow status {status}");
-        private bool QueueModify(string id, string type, string value) => Connection.Write($"queueModify {id} {type} {value}");
-        private bool QueueCancel(string type, string value) => Connection.Write($"queueCancel {type} {value}");
+        private void QueueShow(ARCLJobStatusRequestTypes status) => Connection.Send($"queueShow status {status}");
+        private void QueueModify(string id, string type, string value) => Connection.Send($"queueModify {id} {type} {value}");
+        private void QueueCancel(string type, string value) => Connection.Send($"queueCancel {type} {value}");
 
 
 

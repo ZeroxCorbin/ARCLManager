@@ -4,14 +4,16 @@
     <TargetFrameworks>netstandard2.1;net472</TargetFrameworks>
     <Configurations>Debug;Release;MobileConfiguration</Configurations>
     <LangVersion>8.0</LangVersion>
+    <Platforms>AnyCPU;x64</Platforms>
   </PropertyGroup>
 
   <ItemGroup>
     <Compile Remove="ArclReplay.cs" />
+    <Compile Remove="SychronousCommands.cs" />
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\SocketManager\SocketManager.csproj" />
+    <ProjectReference Include="..\..\AsyncSocket\AsyncSocket.csproj" />
   </ItemGroup>
 
 </Project>
